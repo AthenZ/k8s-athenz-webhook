@@ -1,6 +1,8 @@
-# k8s-athenz-auth
+# k8s-athenz-webhook
 
-API for an Kubernetes authentication and authorization webhook that integrates with
+[![GoDoc](https://godoc.org/github.com/yahoo/k8s-athenz-webhook?status.svg)](https://godoc.org/github.com/yahoo/k8s-athenz-webhook)
+
+API for a Kubernetes authentication and authorization webhook that integrates with
 [Athenz](https://github.com/yahoo/athenz) for access checks. It allows flexible resource
 mapping from K8s resources to Athenz ones.
 
