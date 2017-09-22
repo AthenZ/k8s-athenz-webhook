@@ -17,5 +17,4 @@ script:
   - go install ./...
   - diff -u <(echo -n) <(gofmt -d .)
   - go vet $(go list ./... | grep -v /vendor/)
-  - $HOME/gopath/bin/goveralls -service=travis-ci
-
+  - if [[ "${TRAVIS_GO_VERSION}" =~ ^1\.9 ]]; then ${GOPATH}/bin/goveralls -v -service=travis-ci; else go test -v ./...; fi
