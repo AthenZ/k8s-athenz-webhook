@@ -12,3 +12,9 @@ customize to suit your needs.
 
 You can also use just the authorization hook without also using the authentication hook.
 Use of the authentication hook requires Athenz to be able to sign tokens for users.
+
+Requires go 1.8 or better.
+
+### Credits
+
+[@jer](https://github.com/jer) is the original author of the code out of which the API was extracted.
