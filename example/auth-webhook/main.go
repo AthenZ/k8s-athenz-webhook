@@ -57,17 +57,13 @@ type params struct {
 	keyFile  string
 	authn    api.AuthenticationConfig
 	authz    api.AuthorizationConfig
-	ft       *FileToken
-	w        io.Closer
+	closers  []io.Closer
 	shutdown time.Duration
 }
 
 func (p *params) Close() error {
-	if p.ft != nil {
-		p.ft.Close()
-	}
-	if p.w != nil {
-		p.w.Close()
+	for _, c := range p.closers {
+		c.Close()
 	}
 	return nil
 }
@@ -149,8 +145,8 @@ func parseFlags(program string, args []string) (*params, error) {
 		if err != nil {
 			return nil, err
 		}
+		p.closers = append(p.closers, w)
 	}
-	p.w = w
 
 	c.LogProvider = NewLogProvider(w)
 	c.Timeout, err = time.ParseDuration(timeout)
@@ -164,10 +160,11 @@ func parseFlags(program string, args []string) (*params, error) {
 		return nil, fmt.Errorf("invalid token refresh interval %q, %v", tokenInterval, err)
 	}
 
-	p.ft, err = NewFileToken(ntokenPath, validateToken, fti)
+	ft, err := NewFileToken(ntokenPath, validateToken, fti)
 	if err != nil {
 		return nil, err
 	}
+	p.closers = append(p.closers, ft)
 
 	p.shutdown, err = time.ParseDuration(shutdownGrace)
 	if err != nil {
@@ -190,7 +187,7 @@ func parseFlags(program string, args []string) (*params, error) {
 	}
 	p.authz = api.AuthorizationConfig{
 		Config: c,
-		Token:  p.ft.TokenValue,
+		Token:  ft.TokenValue,
 		Mapper: &ResourceMapper{
 			AdminDomain:    adminDomain,
 			DenyUsers:      splitNames(policyDenyUsers),
