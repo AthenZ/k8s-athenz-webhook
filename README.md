@@ -3,6 +3,7 @@
 [![GoDoc](https://godoc.org/github.com/yahoo/k8s-athenz-webhook?status.svg)](https://godoc.org/github.com/yahoo/k8s-athenz-webhook)
 [![Build Status](https://travis-ci.org/yahoo/k8s-athenz-webhook.svg?branch=master)](https://travis-ci.org/yahoo/k8s-athenz-webhook)
 [![Coverage Status](https://coveralls.io/repos/github/yahoo/k8s-athenz-webhook/badge.svg?branch=master)](https://coveralls.io/github/yahoo/k8s-athenz-webhook?branch=master)
+[![Go Report Card](https://goreportcard.com/badge/github.com/yahoo/k8s-athenz-webhook)](https://goreportcard.com/report/github.com/yahoo/k8s-athenz-webhook)
 
 API for a Kubernetes authentication and authorization webhook that integrates with
 [Athenz](https://github.com/yahoo/athenz) for access checks. It allows flexible resource
