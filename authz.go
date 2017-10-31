@@ -100,12 +100,14 @@ type grantStatus struct {
 }
 
 func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReviewSpec) *grantStatus {
-	deny := func(err error) *grantStatus {
+	deny := func(err error, addHelpText bool) *grantStatus {
 		var reason string
 		if e, ok := err.(*AuthzError); ok {
 			reason = e.Reason()
 		}
-		reason += a.HelpMessage
+		if addHelpText {
+			reason += a.HelpMessage
+		}
 		return &grantStatus{
 			status: authz.SubjectAccessReviewStatus{
 				Allowed:         false,
@@ -116,7 +118,7 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 	}
 	principal, checks, err := a.Mapper.MapResource(ctx, sr)
 	if err != nil {
-		return deny(fmt.Errorf("mapping error: %v", err))
+		return deny(fmt.Errorf("mapping error: %v", err), true)
 	}
 	var granted bool
 	if len(checks) == 0 { // grant it by API contract
@@ -132,20 +134,20 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 	for _, check := range checks {
 		client, err := a.client(ctx)
 		if err != nil {
-			return deny(NewAuthzError(err, internal))
+			return deny(NewAuthzError(err, internal), true)
 		}
 		granted, err = client.authorize(principal, check)
 		if err != nil {
 			switch e := err.(type) {
 			case *statusCodeError:
 				switch e.code {
-				case http.StatusUnauthorized: // identity token was borked
-					return deny(NewAuthzError(err, internal))
+				case http.StatusUnauthorized: // internal identity token was borked
+					return deny(NewAuthzError(err, internal), true)
 				case http.StatusNotFound: // domain setup error
-					return deny(NewAuthzError(fmt.Errorf("domain related error for %v, %v", check, err), fmt.Sprintf("Athenz domain error.")))
+					return deny(NewAuthzError(fmt.Errorf("domain related error for %v, %v", check, err), fmt.Sprintf("Athenz domain error.")), false)
 				}
 			}
-			return deny(NewAuthzError(err, ""))
+			return deny(NewAuthzError(err, ""), true)
 		}
 		if granted {
 			via = check.String()
@@ -158,7 +160,7 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 			list = append(list, fmt.Sprintf("'%s'", c))
 		}
 		msg := fmt.Sprintf("principal %s does not have access to any of %s resources", principal, strings.Join(list, ","))
-		return deny(errors.New(msg)) // not showing this msg to the user, should we?
+		return deny(errors.New(msg), false) // not showing this msg to the user, should we?
 	}
 	return &grantStatus{
 		status: authz.SubjectAccessReviewStatus{

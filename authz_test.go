@@ -190,7 +190,7 @@ func TestAuthzZMSReject(t *testing.T) {
 	if tr.Status.EvaluationError == "" {
 		t.Error("eval error not set")
 	}
-	if tr.Status.Reason != helpText {
+	if tr.Status.Reason != "" {
 		t.Error("authz internals leak")
 	}
 	s.containsLog("authz denied bob: get on foo-bar:baz:: -> error:principal std.principal does not have access to any of 'frob-athenz on my.domain:knob' resources")
@@ -304,7 +304,7 @@ func TestAuthzAthenz404(t *testing.T) {
 		t.Fatal("invalid status code", w.Result().StatusCode)
 	}
 	tr := checkGrant(t, body.Bytes(), false)
-	reason := "Athenz domain error." + helpText
+	reason := "Athenz domain error."
 	if tr.Status.Reason != reason {
 		t.Errorf("reason mismatch: want '%s', got'%s'", reason, tr.Status.Reason)
 	}
