@@ -65,6 +65,27 @@ func (a *authorizer) client(ctx context.Context) (*client, error) {
 	return newClient(a.Endpoint, a.Timeout, xp), nil
 }
 
+// clientX509 returns the client set up with x509 cert and key to make calls to Athenz.
+func (a *authorizer) clientX509(ctx context.Context) (*client, error) {
+
+	config, err := a.AthenzX509()
+	if err != nil {
+		return nil, err
+	}
+	xp509 := &http.Transport{
+		TLSClientConfig: config,
+	}
+	debugXp := &debugTransport{}
+	if isLogEnabled(ctx, LogTraceAthenz) {
+		debugXp = &debugTransport{
+			log:          getLogger(ctx),
+			RoundTripper: xp509,
+		}
+		return newClient(a.Endpoint, a.Timeout, debugXp), nil
+	}
+	return newClient(a.Endpoint, a.Timeout, xp509), nil
+}
+
 // getSubjectAccessReview extracts the subject access review object from the request and returns it.
 func (a *authorizer) getSubjectAccessReview(ctx context.Context, req *http.Request) (*authz.SubjectAccessReview, error) {
 	b, err := ioutil.ReadAll(req.Body)
@@ -131,8 +152,13 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 	}
 	internal := "internal setup error."
 	var via string
+	var client *client
 	for _, check := range checks {
-		client, err := a.client(ctx)
+		if a.AthenzX509 != nil {
+			client, err = a.clientX509(ctx)
+		} else {
+			client, err = a.client(ctx)
+		}
 		if err != nil {
 			return deny(NewAuthzError(err, internal), true)
 		}
