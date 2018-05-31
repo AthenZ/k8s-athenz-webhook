@@ -72,18 +72,19 @@ func (a *authorizer) clientX509(ctx context.Context) (*client, error) {
 	if err != nil {
 		return nil, err
 	}
-	xp509 := &http.Transport{
+	xpX509 := &http.Transport{
 		TLSClientConfig: config,
 	}
+
 	debugXp := &debugTransport{}
 	if isLogEnabled(ctx, LogTraceAthenz) {
 		debugXp = &debugTransport{
 			log:          getLogger(ctx),
-			RoundTripper: xp509,
+			RoundTripper: xpX509,
 		}
 		return newClient(a.Endpoint, a.Timeout, debugXp), nil
 	}
-	return newClient(a.Endpoint, a.Timeout, xp509), nil
+	return newClient(a.Endpoint, a.Timeout, xpX509), nil
 }
 
 // getSubjectAccessReview extracts the subject access review object from the request and returns it.
