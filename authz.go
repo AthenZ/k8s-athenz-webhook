@@ -155,7 +155,7 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 	var via string
 	var client *client
 	for _, check := range checks {
-		if a.AthenzX509 != nil {
+		if a.AthenzClientAuthnx509Mode {
 			client, err = a.clientX509(ctx)
 		} else {
 			client, err = a.client(ctx)
