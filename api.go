@@ -120,12 +120,12 @@ type AuthenticationConfig struct {
 
 // AuthorizationConfig is the authorization configuration
 type AuthorizationConfig struct {
-	Config                                   // the base config
-	HelpMessage           string             // additional message for the user on internal authz errors
-	Token                 IdentityToken      // the token provider for calls to Athenz
-	AthenzX509            IdentityAthenzX509 // the x509 provider for calls to Athenz
-	AthenzClientAuthnMode bool               // enable/disable x509 mode for Identity athenz x509
-	Mapper                ResourceMapper     // the resource mapper
+	Config                                       // the base config
+	HelpMessage               string             // additional message for the user on internal authz errors
+	Token                     IdentityToken      // the token provider for calls to Athenz
+	AthenzX509                IdentityAthenzX509 // the x509 provider for calls to Athenz
+	AthenzClientAuthnx509Mode bool               // enable/disable x509 mode for Identity athenz x509
+	Mapper                    ResourceMapper     // the resource mapper
 }
 
 // NewAuthenticator returns a handler that can service an authentication request.
