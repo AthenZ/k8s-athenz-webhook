@@ -96,6 +96,7 @@ func newAuthzScaffoldX509(t *testing.T) *authzScaffold {
 		AthenzX509: func() (*tls.Config, error) {
 			return &tls.Config{}, nil
 		},
+		AthenzClientAuthnx509Mode: true,
 		Mapper: mrfn(func(ctx context.Context, spec authz.SubjectAccessReviewSpec) (principal string, checks []AthenzAccessCheck, err error) {
 			return "std.principal",
 				[]AthenzAccessCheck{{Action: "frob-athenz", Resource: "my.domain:knob"}},
