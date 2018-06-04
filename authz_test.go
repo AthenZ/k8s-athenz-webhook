@@ -3,16 +3,15 @@ package webhook
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
-
-	"encoding/json"
-
-	"fmt"
 
 	authz "k8s.io/api/authorization/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -69,6 +68,35 @@ func newAuthzScaffold(t *testing.T) *authzScaffold {
 		Token: func() (string, error) {
 			return fixedToken.String(), nil
 		},
+		Mapper: mrfn(func(ctx context.Context, spec authz.SubjectAccessReviewSpec) (principal string, checks []AthenzAccessCheck, err error) {
+			return "std.principal",
+				[]AthenzAccessCheck{{Action: "frob-athenz", Resource: "my.domain:knob"}},
+				nil
+		}),
+	}
+	return &authzScaffold{
+		t:       t,
+		mockZMS: m,
+		l:       l,
+		config:  c,
+	}
+}
+
+func newAuthzScaffoldX509(t *testing.T) *authzScaffold {
+	m := newMockZMS()
+	l, p := logProvider()
+	c := AuthorizationConfig{
+		Config: Config{
+			AuthHeader:  "X-Auth",
+			Endpoint:    m.URL,
+			Timeout:     200 * time.Millisecond,
+			LogProvider: p,
+		},
+		HelpMessage: helpText,
+		AthenzX509: func() (*tls.Config, error) {
+			return &tls.Config{}, nil
+		},
+		AthenzClientAuthnx509Mode: true,
 		Mapper: mrfn(func(ctx context.Context, spec authz.SubjectAccessReviewSpec) (principal string, checks []AthenzAccessCheck, err error) {
 			return "std.principal",
 				[]AthenzAccessCheck{{Action: "frob-athenz", Resource: "my.domain:knob"}},
@@ -169,31 +197,75 @@ func TestAuthzHappyPath(t *testing.T) {
 	s.containsLog("authz granted bob: get on foo-bar:baz:: -> via frob-athenz on my.domain:knob")
 }
 
-func TestAuthzZMSReject(t *testing.T) {
-	s := newAuthzScaffold(t)
+func TestAuthzHappyPathX509(t *testing.T) {
+	s := newAuthzScaffoldX509(t)
+	s.config.LogFlags = LogTraceAthenz | LogTraceServer
 	defer s.Close()
+	var urlPath string
 	grant := struct {
 		Granted bool `json:"granted"`
-	}{false}
+	}{true}
 	zmsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		urlPath = r.URL.Path
 		writeJSON(testContext, w, grant)
 	})
 	input := stdAuthzInput()
 	ar := runAuthzTest(s, serialize(input), zmsHandler)
 	w := ar.w
 	body := ar.body
-
 	if w.Result().StatusCode != 200 {
 		t.Fatal("invalid status code", w.Result().StatusCode)
 	}
-	tr := checkGrant(t, body.Bytes(), false)
-	if tr.Status.EvaluationError == "" {
-		t.Error("eval error not set")
+	if urlPath != "/access/frob-athenz/my.domain:knob" {
+		t.Error("invalid ZMS URL path", urlPath)
 	}
-	if tr.Status.Reason != "" {
-		t.Error("authz internals leak")
+	tr := checkGrant(t, body.Bytes(), true)
+	if tr.Kind != input.Kind {
+		t.Error("invalid Kind", tr.Kind)
 	}
-	s.containsLog("authz denied bob: get on foo-bar:baz:: -> error:principal std.principal does not have access to any of 'frob-athenz on my.domain:knob' resources")
+	if tr.APIVersion != input.APIVersion {
+		t.Error("invalid API version", tr.APIVersion)
+	}
+	s.containsLog("authz granted bob: get on foo-bar:baz:: -> via frob-athenz on my.domain:knob")
+}
+
+func TestAuthzZMSReject(t *testing.T) {
+
+	tests := []struct {
+		name string
+		s    interface{}
+	}{
+		{"token", newAuthnScaffold(t)},
+		{"x509", newAuthzScaffoldX509(t)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newAuthzScaffold(t)
+			defer s.Close()
+			grant := struct {
+				Granted bool `json:"granted"`
+			}{false}
+			zmsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				writeJSON(testContext, w, grant)
+			})
+			input := stdAuthzInput()
+			ar := runAuthzTest(s, serialize(input), zmsHandler)
+			w := ar.w
+			body := ar.body
+
+			if w.Result().StatusCode != 200 {
+				t.Fatal("invalid status code", w.Result().StatusCode)
+			}
+			tr := checkGrant(t, body.Bytes(), false)
+			if tr.Status.EvaluationError == "" {
+				t.Error("eval error not set")
+			}
+			if tr.Status.Reason != "" {
+				t.Error("authz internals leak")
+			}
+			s.containsLog("authz denied bob: get on foo-bar:baz:: -> error:principal std.principal does not have access to any of 'frob-athenz on my.domain:knob' resources")
+		})
+	}
 }
 
 func TestAuthzMapperBypass(t *testing.T) {

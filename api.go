@@ -10,6 +10,8 @@ import (
 	"os"
 	"time"
 
+	"crypto/tls"
+
 	authn "k8s.io/api/authentication/v1beta1"
 	authz "k8s.io/api/authorization/v1beta1"
 )
@@ -52,6 +54,8 @@ func GetLogger(ctx context.Context) Logger {
 
 // IdentityToken provides an ntoken for Athenz access for the authorization handler itself.
 type IdentityToken func() (string, error)
+
+type IdentityAthenzX509 func() (*tls.Config, error)
 
 // AthenzPrincipal represents a valid Athenz principal.
 type AthenzPrincipal struct {
@@ -116,10 +120,12 @@ type AuthenticationConfig struct {
 
 // AuthorizationConfig is the authorization configuration
 type AuthorizationConfig struct {
-	Config                     // the base config
-	HelpMessage string         // additional message for the user on internal authz errors
-	Token       IdentityToken  // the token provider for calls to Athenz
-	Mapper      ResourceMapper // the resource mapper
+	Config                                       // the base config
+	HelpMessage               string             // additional message for the user on internal authz errors
+	Token                     IdentityToken      // the token provider for calls to Athenz
+	AthenzX509                IdentityAthenzX509 // the x509 provider for calls to Athenz
+	AthenzClientAuthnx509Mode bool               // enable/disable x509 mode for Identity athenz x509
+	Mapper                    ResourceMapper     // the resource mapper
 }
 
 // NewAuthenticator returns a handler that can service an authentication request.
