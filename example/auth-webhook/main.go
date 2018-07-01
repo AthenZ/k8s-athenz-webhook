@@ -98,7 +98,7 @@ func parseFlags(program string, args []string) (*params, error) {
 	f.StringVar(&p.keyFile, "key", "", "Path to TLS key file")
 	f.StringVar(&logFile, "logfile", "", "File to write logs to. Defaults to stderr")
 	f.StringVar(&ntokenPath, "ntoken-path", defaultNtokenPath, "Path to ntoken")
-	f.StringVar(&c.Endpoint, "zms-url", defaultZMSURL, "URL to the ZMS endpoint")
+	f.StringVar(&c.zmsEndpoint, "zms-url", defaultZMSURL, "URL to the ZMS endpoint")
 	f.StringVar(&c.AuthHeader, "auth-header", "Athenz-Principal-Auth", "Athenz auth header name")
 	f.BoolVar(&validateToken, "validate-token", true, "Validate the identity ntoken on load")
 	f.StringVar(&k8sGroups, "groups", "", "comma-separated list of k8s groups to add to user info")

@@ -77,12 +77,13 @@ func (a *authenticator) authenticate(ctx context.Context, nt *ntoken) (ts *authn
 			log:          getLogger(ctx),
 		}
 	}
-	client := newClient(a.Endpoint, a.Timeout, xp)
-	p, err := client.authenticate()
+
+	token, err := a.Validator.Validate(nt.raw)
 	if err != nil {
 		return a.deny(err)
 	}
-	u, err := a.Mapper.MapUser(ctx, *p)
+
+	u, err := a.Mapper.MapUser(ctx, token)
 	if err != nil {
 		return a.deny(err)
 	}

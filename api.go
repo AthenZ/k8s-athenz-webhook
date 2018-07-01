@@ -4,16 +4,17 @@ package webhook
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
-	"crypto/tls"
-
 	authn "k8s.io/api/authentication/v1beta1"
 	authz "k8s.io/api/authorization/v1beta1"
+
+	"github.com/yahoo/athenz/libs/go/zmssvctoken"
 )
 
 // DefaultClientTimeout is used when no timeout is supplied in the config.
@@ -68,7 +69,7 @@ type AthenzPrincipal struct {
 type UserMapper interface {
 	// MapUser maps an Athenz principal to a user info object.
 	// Returning an error will cause an authentication failure.
-	MapUser(ctx context.Context, p AthenzPrincipal) (authn.UserInfo, error)
+	MapUser(ctx context.Context, t *zmssvctoken.NToken) (authn.UserInfo, error)
 }
 
 // AthenzAccessCheck encapsulates the parameters for an authz check against Athenz.
@@ -94,11 +95,13 @@ type ResourceMapper interface {
 
 // Config is the common configuration for authn and authz
 type Config struct {
-	Endpoint    string        // ZMS endpoint including version specific (e.g. /v1) path
-	AuthHeader  string        // header name for ntoken in Athenz requests
-	Timeout     time.Duration // timeout for all Athenz requests
-	LogProvider LogProvider   // the log provider
-	LogFlags    LogFlags      // logging flags
+	ZMSEndpoint string                     // ZMS endpoint including version specific (e.g. /v1) path
+	ZTSEndpoint string                     // ZTS endpoint including version specific (e.g. /v1) path
+	AuthHeader  string                     // header name for ntoken in Athenz requests
+	Timeout     time.Duration              // timeout for all Athenz requests
+	LogProvider LogProvider                // the log provider
+	LogFlags    LogFlags                   // logging flags
+	Validator   zmssvctoken.TokenValidator // token validator
 }
 
 func (c *Config) initDefaults() {

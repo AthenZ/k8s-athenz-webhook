@@ -86,13 +86,15 @@ func newAuthTransport(header string, token string) http.RoundTripper {
 
 // client is a client to the Athenz service.
 type client struct {
-	endpoint string
-	c        *http.Client
+	zmsEndpoint string
+	ztsEndpoint string
+	c           *http.Client
 }
 
-func newClient(endpoint string, timeout time.Duration, tr http.RoundTripper) *client {
+func newClient(zmsEndpoint, ztsEndpoint string, timeout time.Duration, tr http.RoundTripper) *client {
 	return &client{
-		endpoint: endpoint,
+		zmsEndpoint: zmsEndpoint,
+		ztsEndpoint: ztsEndpoint,
 		c: &http.Client{
 			Timeout:   timeout,
 			Transport: tr,
@@ -136,33 +138,22 @@ func (c *client) request(u string, data interface{}, validator func(body []byte)
 	return nil
 }
 
-// authenticate make a request assuming that the transport has been configured
-// to present the user's token and returns the response from Athenz.
-func (c *client) authenticate() (*AthenzPrincipal, error) {
-	u := fmt.Sprintf("%s/principal", c.endpoint)
-	var ap AthenzPrincipal
-	err := c.request(u, &ap, func(b []byte) error {
-		if ap.Domain == "" || ap.Service == "" {
-			return fmt.Errorf("GET %s unable to get domain and/or name from %s", u, b)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &ap, nil
-}
-
-// authorize returns true if the supplied principal has access to the resource and action.
+// authorize returns true if the supplied principal has access to the resource and action. The initial check is done
+// against the zms endpoint. If that is unreachable, the check is retried against the zts endpoint.
 func (c *client) authorize(principal string, check AthenzAccessCheck) (bool, error) {
 	var authzResponse struct {
 		Granted bool `json:"granted"`
 	}
 	esc := url.PathEscape
-	u := fmt.Sprintf("%s/access/%s/%s?principal=%s", c.endpoint, esc(check.Action), esc(check.Resource), esc(principal))
+	u := fmt.Sprintf("%s/access/%s/%s?principal=%s", c.zmsEndpoint, esc(check.Action), esc(check.Resource), esc(principal))
 	err := c.request(u, &authzResponse, nil)
 	if err != nil {
-		return false, err
+		authzResponse.Granted = false
+		u := fmt.Sprintf("%s/access/%s/%s?principal=%s", c.ztsEndpoint, esc(check.Action), esc(check.Resource), esc(principal))
+		err := c.request(u, &authzResponse, nil)
+		if err != nil {
+			return false, err
+		}
 	}
 	return authzResponse.Granted, nil
 }

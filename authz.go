@@ -62,7 +62,7 @@ func (a *authorizer) client(ctx context.Context) (*client, error) {
 			RoundTripper: xp,
 		}
 	}
-	return newClient(a.Endpoint, a.Timeout, xp), nil
+	return newClient(a.ZMSEndpoint, a.ZTSEndpoint, a.Timeout, xp), nil
 }
 
 // clientX509 returns the client set up with x509 cert and key to make calls to Athenz.
@@ -82,9 +82,9 @@ func (a *authorizer) clientX509(ctx context.Context) (*client, error) {
 			log:          getLogger(ctx),
 			RoundTripper: xpX509,
 		}
-		return newClient(a.Endpoint, a.Timeout, debugXp), nil
+		return newClient(a.ZMSEndpoint, a.ZTSEndpoint, a.Timeout, debugXp), nil
 	}
-	return newClient(a.Endpoint, a.Timeout, xpX509), nil
+	return newClient(a.ZMSEndpoint, a.ZTSEndpoint, a.Timeout, xpX509), nil
 }
 
 // getSubjectAccessReview extracts the subject access review object from the request and returns it.

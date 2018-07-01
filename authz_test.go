@@ -60,7 +60,8 @@ func newAuthzScaffold(t *testing.T) *authzScaffold {
 	c := AuthorizationConfig{
 		Config: Config{
 			AuthHeader:  "X-Auth",
-			Endpoint:    m.URL,
+			ZMSEndpoint: m.URL,
+			ZTSEndpoint: m.URL,
 			Timeout:     200 * time.Millisecond,
 			LogProvider: p,
 		},
@@ -88,7 +89,7 @@ func newAuthzScaffoldX509(t *testing.T) *authzScaffold {
 	c := AuthorizationConfig{
 		Config: Config{
 			AuthHeader:  "X-Auth",
-			Endpoint:    m.URL,
+			ZMSEndpoint: m.URL,
 			Timeout:     200 * time.Millisecond,
 			LogProvider: p,
 		},
