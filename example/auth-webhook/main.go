@@ -26,12 +26,15 @@ import (
 	"time"
 
 	api "github.com/yahoo/k8s-athenz-webhook"
+
+	"github.com/yahoo/athenz/libs/go/zmssvctoken"
 )
 
 const (
 	defaultPort       = 443
 	defaultNtokenPath = `/tokens/ntoken`
 	defaultZMSURL     = `https://localhost/zms/v1`
+	defaultZTSURL     = `https://localhost/zts/v1`
 )
 
 var (
@@ -98,7 +101,8 @@ func parseFlags(program string, args []string) (*params, error) {
 	f.StringVar(&p.keyFile, "key", "", "Path to TLS key file")
 	f.StringVar(&logFile, "logfile", "", "File to write logs to. Defaults to stderr")
 	f.StringVar(&ntokenPath, "ntoken-path", defaultNtokenPath, "Path to ntoken")
-	f.StringVar(&c.zmsEndpoint, "zms-url", defaultZMSURL, "URL to the ZMS endpoint")
+	f.StringVar(&c.ZMSEndpoint, "zms-url", defaultZMSURL, "URL to the ZMS endpoint")
+	f.StringVar(&c.ZTSEndpoint, "zts-url", defaultZTSURL, "URL to the ZTS endpoint")
 	f.StringVar(&c.AuthHeader, "auth-header", "Athenz-Principal-Auth", "Athenz auth header name")
 	f.BoolVar(&validateToken, "validate-token", true, "Validate the identity ntoken on load")
 	f.StringVar(&k8sGroups, "groups", "", "comma-separated list of k8s groups to add to user info")
@@ -185,6 +189,11 @@ func parseFlags(program string, args []string) (*params, error) {
 			Groups: groups,
 		},
 	}
+	p.authn.Config.Validator = zmssvctoken.NewTokenValidator(zmssvctoken.ValidationConfig{
+		ZTSBaseUrl:            c.ZTSEndpoint,
+		PublicKeyFetchTimeout: 30 * time.Second,
+		CacheTTL:              2 * time.Hour,
+	})
 	p.authz = api.AuthorizationConfig{
 		Config: c,
 		Token:  ft.TokenValue,
