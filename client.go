@@ -139,17 +139,17 @@ func (c *client) request(u string, data interface{}, validator func(body []byte)
 }
 
 // authorize returns true if the supplied principal has access to the resource and action. The initial check is done
-// against the zms endpoint. If that is unreachable, the check is retried against the zts endpoint.
+// against the zts endpoint. If that is unreachable, the check is retried against the zms endpoint.
 func (c *client) authorize(principal string, check AthenzAccessCheck) (bool, error) {
 	var authzResponse struct {
 		Granted bool `json:"granted"`
 	}
 	esc := url.PathEscape
-	u := fmt.Sprintf("%s/access/%s/%s?principal=%s", c.zmsEndpoint, esc(check.Action), esc(check.Resource), esc(principal))
+	u := fmt.Sprintf("%s/access/%s/%s?principal=%s", c.ztsEndpoint, esc(check.Action), esc(check.Resource), esc(principal))
 	err := c.request(u, &authzResponse, nil)
 	if err != nil {
 		authzResponse.Granted = false
-		u := fmt.Sprintf("%s/access/%s/%s?principal=%s", c.ztsEndpoint, esc(check.Action), esc(check.Resource), esc(principal))
+		u := fmt.Sprintf("%s/access/%s/%s?principal=%s", c.zmsEndpoint, esc(check.Action), esc(check.Resource), esc(principal))
 		err := c.request(u, &authzResponse, nil)
 		if err != nil {
 			return false, err
