@@ -16,12 +16,55 @@ import (
 	authz "k8s.io/api/authorization/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/json"
+
+	"github.com/stretchr/testify/require"
+	"github.com/yahoo/athenz/libs/go/zmssvctoken"
 )
 
 var (
 	origStdout = os.Stdout
 	origStderr = os.Stderr
 )
+
+var rsaPrivateKeyPEM = []byte(`-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEAxq83nCd8AqH5n40dEBMElbaJd2gFWu6bjhNzyp9562dpf454
+BUSN0uF+g3i1yzcwdvADTiuExKN1u/IoGURxVCa0JTzAPJw6/JIoyOZnHZCoarcg
+QQqZ56/udkSQ2NssrwGSQjOwxMrgIdH6XeLgGqVN4BoEEI+gpaQZa7rSytU5RFSG
+OnZWO2Vwgs1OBxiOiYg1gzA1spJXQhxcBWw/v+YrUFtjxBKsG1UrWbnHbgciiN5U
+2v51Yztjo8A1T+o9eIG90jVo3EhS2qhbzd8mLAsEhjV1sP8GItjfdfwXpXT7q2QG
+99W3PM75+HdwGLvJIrkED7YRj4CpMkz6F1etawIDAQABAoIBAD67C7/N56WdJodt
+soNkvcnXPEfrG+W9+Hc/RQvwljnxCKoxfUuMfYrbj2pLLnrfDfo/hYukyeKcCYwx
+xN9VcMK1BaPMLpX0bdtY+m+T73KyPbqT3ycqBbXVImFM/L67VLxcrqUgVOuNcn67
+IWWLQF6pWpErJaVk87/Ys/4DmpJXebLDyta8+ce6r0ppSG5+AifGo1byQT7kSJkF
+lyQsyKWoVN+02s7gLsln5JXXZ672y2Xtp/S3wK0vfzy/HcGSxzn1yE0M5UJtDm/Y
+qECnV1LQ0FB1l1a+/itHR8ipp5rScD4ZpzOPLKthglEvNPe4Lt5rieH9TR97siEe
+SrC8uyECgYEA5Q/elOJAddpE+cO22gTFt973DcPGjM+FYwgdrora+RfEXJsMDoKW
+AGSm5da7eFo8u/bJEvHSJdytc4CRQYnWNryIaUw2o/1LYXRvoEt1rEEgQ4pDkErR
+PsVcVuc3UDeeGtYJwJLV6pjxO11nodFv4IgaVj64SqvCOApTTJgWXF0CgYEA3gzN
+d3l376mSMuKc4Ep++TxybzA5mtF2qoXucZOon8EDJKr+vGQ9Z6X4YSdkSMNXqK1j
+ILmFH7V3dyMOKRBA84YeawFacPLBJq+42t5Q1OYdcKZbaArlBT8ImGT7tQODs3JN
+4w7DH+V1v/VCTl2zQaZRksb0lUsQbFiEfj+SVGcCgYAYIlDoTOJPyHyF+En2tJQE
+aHiNObhcs6yxH3TJJBYoMonc2/UsPjQBvJkdFD/SUWeewkSzO0lR9etMhRpI1nX8
+dGbG+WG0a4aasQLl162BRadZlmLB/DAJtg+hlGDukb2VxEFoyc/CFPUttQyrLv7j
+oFNuDNOsAmbHMsdOBaQtfQKBgQCb/NRuRNebdj0tIALikZLHVc5yC6e7+b/qJPIP
+uZIwv++MV89h2u1EHdTxszGA6DFxXnSPraQ2VU2aVPcCo9ds+9/sfePiCrbjjXhH
+0PtpxEoUM9lsqpKeb9yC6hXk4JYpfnf2tQ0gIBrrAclVsf9WdBdEDB4Prs7Xvgs9
+gT0zqwKBgQCzZubFO0oTYO9e2r8wxPPPsE3ZCjbP/y7lIoBbSzxDGUubXmbvD0GO
+MC8dM80plsTym96UxpKkQMAglKKLPtG2n8xB8v5H/uIB4oIegMSEx3F7MRWWIQmR
+Gea7bQ16YCzM/l2yygGhAW61bg2Z2GoVF6X5z/qhKGyo97V87qTbmg==
+-----END RSA PRIVATE KEY-----
+`)
+
+var rsaPublicKeyPEM = []byte(`-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxq83nCd8AqH5n40dEBME
+lbaJd2gFWu6bjhNzyp9562dpf454BUSN0uF+g3i1yzcwdvADTiuExKN1u/IoGURx
+VCa0JTzAPJw6/JIoyOZnHZCoarcgQQqZ56/udkSQ2NssrwGSQjOwxMrgIdH6XeLg
+GqVN4BoEEI+gpaQZa7rSytU5RFSGOnZWO2Vwgs1OBxiOiYg1gzA1spJXQhxcBWw/
+v+YrUFtjxBKsG1UrWbnHbgciiN5U2v51Yztjo8A1T+o9eIG90jVo3EhS2qhbzd8m
+LAsEhjV1sP8GItjfdfwXpXT7q2QG99W3PM75+HdwGLvJIrkED7YRj4CpMkz6F1et
+awIDAQAB
+-----END PUBLIC KEY-----
+`)
 
 // tok writes a valid ntoken to disk and cleans up with the Close method
 type tok struct {
@@ -55,6 +98,14 @@ func newTok(t *testing.T) *tok {
 	f.Write(v)
 	f.Close()
 	return &tok{f: f.Name(), v: v}
+}
+
+func getToken(t *testing.T) string {
+	tokenBuilder, err := zmssvctoken.NewTokenBuilder("my.domain", "foo", rsaPrivateKeyPEM, "v1")
+	require.Nil(t, err)
+	token, err := tokenBuilder.Token().Value()
+	require.Nil(t, err)
+	return token
 }
 
 // streamHijack hijacks stdout and stderr streams and restores them on Close
@@ -220,8 +271,8 @@ func TestMainParams(t *testing.T) {
 		{p.addr, addr},
 		{p.keyFile, key},
 		{p.certFile, cert},
-		{p.authn.Config.Endpoint, zms},
-		{p.authz.Config.Endpoint, zms},
+		{p.authn.Config.ZMSEndpoint, zms},
+		{p.authz.Config.ZMSEndpoint, zms},
 		{p.authz.HelpMessage, helpMsg},
 		{p.authz.Mapper.(*ResourceMapper).AdminResources, splitNames(adminResources)},
 		{p.authz.Mapper.(*ResourceMapper).DenyUsers, splitNames(denyUsers)},
@@ -324,6 +375,13 @@ type capture struct {
 func TestRunWithMockZMS(t *testing.T) {
 	var records []capture
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "publickey") {
+			ybase := zmssvctoken.YBase64{}
+			keyString := ybase.EncodeToString(rsaPublicKeyPEM)
+			w.Write([]byte(fmt.Sprintf(`{ "key": "%s" }`, keyString)))
+			return
+		}
+
 		h := r.Header.Get("Athenz-Principal-Auth")
 		b, err := ioutil.ReadAll(r.Body)
 		if err != nil {
@@ -352,6 +410,7 @@ func TestRunWithMockZMS(t *testing.T) {
 				"--tls=false",
 				fmt.Sprintf("--listen=:%d", port),
 				fmt.Sprintf("--zms-url=%s", s.URL),
+				fmt.Sprintf("--zts-url=%s", s.URL),
 			},
 			ch,
 		)
@@ -369,7 +428,7 @@ func TestRunWithMockZMS(t *testing.T) {
 			APIVersion: "authentication.k8s.io/v1beta1",
 		},
 		Spec: authn.TokenReviewSpec{
-			Token: string(tok.v),
+			Token: getToken(t),
 		},
 	}
 	sar := authz.SubjectAccessReview{

@@ -148,7 +148,7 @@ func requestTester(handler http.Handler, data interface{}, validator func([]byte
 	if handler == nil {
 		server.Close() // make endpoint not respond
 	}
-	client := newClient(server.URL, 200*time.Millisecond, http.DefaultTransport)
+	client := newClient(server.URL, server.URL, 200*time.Millisecond, http.DefaultTransport)
 	err := client.request(server.URL, data, validator)
 	asserter(err)
 }
@@ -246,42 +246,12 @@ func TestClientTimeout(t *testing.T) {
 	})
 }
 
-func TestClientAuthenticate(t *testing.T) {
-	p := AthenzPrincipal{Domain: "d", Service: "s", Token: "t"}
-	h := marshaler(p)
-	server := httptest.NewServer(h)
-	defer server.Close()
-	client := newClient(server.URL, 200*time.Millisecond, http.DefaultTransport)
-	ret, err := client.authenticate()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if *ret != p {
-		t.Fatal("principal mismatch, want", p, ",got", ret)
-	}
-}
-
-func TestClientAuthenticateMissingFields(t *testing.T) {
-	p := AthenzPrincipal{Domain: "", Service: "s", Token: "t"}
-	h := marshaler(p)
-	server := httptest.NewServer(h)
-	defer server.Close()
-	client := newClient(server.URL, 200*time.Millisecond, http.DefaultTransport)
-	_, err := client.authenticate()
-	if err == nil {
-		t.Fatal("expected error, got success")
-	}
-	if !strings.Contains(err.Error(), "unable to get domain") {
-		t.Error("bad msg", err)
-	}
-}
-
 func TestClientAuthorize(t *testing.T) {
 	p := struct{ Granted bool }{true}
 	h := marshaler(p)
 	server := httptest.NewServer(h)
 	defer server.Close()
-	client := newClient(server.URL, 200*time.Millisecond, http.DefaultTransport)
+	client := newClient(server.URL, server.URL, 200*time.Millisecond, http.DefaultTransport)
 	granted, err := client.authorize("me", AthenzAccessCheck{Resource: "d:service", Action: "read"})
 	if err != nil {
 		t.Fatal(err)
@@ -294,7 +264,7 @@ func TestClientAuthorize(t *testing.T) {
 func TestClientAuthorizeFail(t *testing.T) {
 	server := httptest.NewServer(nil)
 	server.Close()
-	client := newClient(server.URL, 200*time.Millisecond, http.DefaultTransport)
+	client := newClient(server.URL, server.URL, 200*time.Millisecond, http.DefaultTransport)
 	granted, err := client.authorize("me", AthenzAccessCheck{Resource: "d:service", Action: "read"})
 	if err == nil {
 		t.Fatal("expected error, got success")

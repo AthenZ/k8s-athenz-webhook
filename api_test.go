@@ -7,6 +7,8 @@ import (
 
 	authn "k8s.io/api/authentication/v1beta1"
 	authz "k8s.io/api/authorization/v1beta1"
+
+	"github.com/yahoo/athenz/libs/go/zmssvctoken"
 )
 
 func TestAPIAccessCheckString(t *testing.T) {
@@ -45,7 +47,7 @@ func ensurePanic(t *testing.T, fn func()) {
 type urm struct {
 }
 
-func (u *urm) MapUser(ctx context.Context, p AthenzPrincipal) (authn.UserInfo, error) {
+func (u *urm) MapUser(ctx context.Context, token *zmssvctoken.NToken) (authn.UserInfo, error) {
 	return authn.UserInfo{}, errors.New("not implemented")
 }
 

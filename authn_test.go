@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -14,12 +15,63 @@ import (
 
 	authn "k8s.io/api/authentication/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/stretchr/testify/require"
+	"github.com/yahoo/athenz/libs/go/zmssvctoken"
 )
 
-type mpfn func(ctx context.Context, p AthenzPrincipal) (authn.UserInfo, error)
+var rsaPrivateKeyPEM = []byte(`-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEAxq83nCd8AqH5n40dEBMElbaJd2gFWu6bjhNzyp9562dpf454
+BUSN0uF+g3i1yzcwdvADTiuExKN1u/IoGURxVCa0JTzAPJw6/JIoyOZnHZCoarcg
+QQqZ56/udkSQ2NssrwGSQjOwxMrgIdH6XeLgGqVN4BoEEI+gpaQZa7rSytU5RFSG
+OnZWO2Vwgs1OBxiOiYg1gzA1spJXQhxcBWw/v+YrUFtjxBKsG1UrWbnHbgciiN5U
+2v51Yztjo8A1T+o9eIG90jVo3EhS2qhbzd8mLAsEhjV1sP8GItjfdfwXpXT7q2QG
+99W3PM75+HdwGLvJIrkED7YRj4CpMkz6F1etawIDAQABAoIBAD67C7/N56WdJodt
+soNkvcnXPEfrG+W9+Hc/RQvwljnxCKoxfUuMfYrbj2pLLnrfDfo/hYukyeKcCYwx
+xN9VcMK1BaPMLpX0bdtY+m+T73KyPbqT3ycqBbXVImFM/L67VLxcrqUgVOuNcn67
+IWWLQF6pWpErJaVk87/Ys/4DmpJXebLDyta8+ce6r0ppSG5+AifGo1byQT7kSJkF
+lyQsyKWoVN+02s7gLsln5JXXZ672y2Xtp/S3wK0vfzy/HcGSxzn1yE0M5UJtDm/Y
+qECnV1LQ0FB1l1a+/itHR8ipp5rScD4ZpzOPLKthglEvNPe4Lt5rieH9TR97siEe
+SrC8uyECgYEA5Q/elOJAddpE+cO22gTFt973DcPGjM+FYwgdrora+RfEXJsMDoKW
+AGSm5da7eFo8u/bJEvHSJdytc4CRQYnWNryIaUw2o/1LYXRvoEt1rEEgQ4pDkErR
+PsVcVuc3UDeeGtYJwJLV6pjxO11nodFv4IgaVj64SqvCOApTTJgWXF0CgYEA3gzN
+d3l376mSMuKc4Ep++TxybzA5mtF2qoXucZOon8EDJKr+vGQ9Z6X4YSdkSMNXqK1j
+ILmFH7V3dyMOKRBA84YeawFacPLBJq+42t5Q1OYdcKZbaArlBT8ImGT7tQODs3JN
+4w7DH+V1v/VCTl2zQaZRksb0lUsQbFiEfj+SVGcCgYAYIlDoTOJPyHyF+En2tJQE
+aHiNObhcs6yxH3TJJBYoMonc2/UsPjQBvJkdFD/SUWeewkSzO0lR9etMhRpI1nX8
+dGbG+WG0a4aasQLl162BRadZlmLB/DAJtg+hlGDukb2VxEFoyc/CFPUttQyrLv7j
+oFNuDNOsAmbHMsdOBaQtfQKBgQCb/NRuRNebdj0tIALikZLHVc5yC6e7+b/qJPIP
+uZIwv++MV89h2u1EHdTxszGA6DFxXnSPraQ2VU2aVPcCo9ds+9/sfePiCrbjjXhH
+0PtpxEoUM9lsqpKeb9yC6hXk4JYpfnf2tQ0gIBrrAclVsf9WdBdEDB4Prs7Xvgs9
+gT0zqwKBgQCzZubFO0oTYO9e2r8wxPPPsE3ZCjbP/y7lIoBbSzxDGUubXmbvD0GO
+MC8dM80plsTym96UxpKkQMAglKKLPtG2n8xB8v5H/uIB4oIegMSEx3F7MRWWIQmR
+Gea7bQ16YCzM/l2yygGhAW61bg2Z2GoVF6X5z/qhKGyo97V87qTbmg==
+-----END RSA PRIVATE KEY-----
+`)
 
-func (m mpfn) MapUser(ctx context.Context, p AthenzPrincipal) (authn.UserInfo, error) {
-	return m(ctx, p)
+var rsaPublicKeyPEM = []byte(`-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxq83nCd8AqH5n40dEBME
+lbaJd2gFWu6bjhNzyp9562dpf454BUSN0uF+g3i1yzcwdvADTiuExKN1u/IoGURx
+VCa0JTzAPJw6/JIoyOZnHZCoarcgQQqZ56/udkSQ2NssrwGSQjOwxMrgIdH6XeLg
+GqVN4BoEEI+gpaQZa7rSytU5RFSGOnZWO2Vwgs1OBxiOiYg1gzA1spJXQhxcBWw/
+v+YrUFtjxBKsG1UrWbnHbgciiN5U2v51Yztjo8A1T+o9eIG90jVo3EhS2qhbzd8m
+LAsEhjV1sP8GItjfdfwXpXT7q2QG99W3PM75+HdwGLvJIrkED7YRj4CpMkz6F1et
+awIDAQAB
+-----END PUBLIC KEY-----
+`)
+
+func getToken(t *testing.T) string {
+	tokenBuilder, err := zmssvctoken.NewTokenBuilder("my.domain", "foo", rsaPrivateKeyPEM, "v1")
+	require.Nil(t, err)
+	token, err := tokenBuilder.Token().Value()
+	require.Nil(t, err)
+	return token
+}
+
+type mpfn func(ctx context.Context, token *zmssvctoken.NToken) (authn.UserInfo, error)
+
+func (m mpfn) MapUser(ctx context.Context, token *zmssvctoken.NToken) (authn.UserInfo, error) {
+	return m(ctx, token)
 }
 
 type authnScaffold struct {
@@ -47,18 +99,23 @@ func newAuthnScaffold(t *testing.T) *authnScaffold {
 	c := AuthenticationConfig{
 		Config: Config{
 			AuthHeader:  "X-Auth",
-			Endpoint:    m.URL,
+			ZMSEndpoint: m.URL,
 			Timeout:     200 * time.Millisecond,
 			LogProvider: p,
 		},
-		Mapper: mpfn(func(ctx context.Context, p AthenzPrincipal) (authn.UserInfo, error) {
+		Mapper: mpfn(func(ctx context.Context, token *zmssvctoken.NToken) (authn.UserInfo, error) {
 			return authn.UserInfo{
-				Username: p.Domain + "." + p.Service,
+				Username: token.Domain + "." + token.Name,
 				UID:      "100",
 				Groups:   []string{"foo"},
 			}, nil
 		}),
 	}
+	c.Validator = zmssvctoken.NewTokenValidator(zmssvctoken.ValidationConfig{
+		ZTSBaseUrl:            m.URL,
+		PublicKeyFetchTimeout: 30 * time.Second,
+		CacheTTL:              2 * time.Hour,
+	})
 	return &authnScaffold{
 		t:       t,
 		mockZMS: m,
@@ -103,15 +160,23 @@ func runAuthnTest(s *authnScaffold, input []byte, handler http.Handler) *authnTe
 func TestAuthnHappyPath(t *testing.T) {
 	s := newAuthnScaffold(t)
 	defer s.Close()
-	input := stdAuthnInput(s.token.String())
+	token := getToken(t)
+	input := stdAuthnInput(token)
 
 	var urlPath, tokenReceived string
 	ap := AthenzPrincipal{
 		Domain:  "my.domain",
 		Service: "foo",
-		Token:   stdToken().String(),
+		Token:   token,
 	}
 	zmsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "publickey") {
+			ybase := zmssvctoken.YBase64{}
+			keyString := ybase.EncodeToString(rsaPublicKeyPEM)
+			w.Write([]byte(fmt.Sprintf(`{ "key": "%s" }`, keyString)))
+			return
+		}
+
 		tokenReceived = r.Header.Get("X-Auth")
 		urlPath = r.URL.Path
 		writeJSON(testContext, w, ap)
@@ -121,12 +186,6 @@ func TestAuthnHappyPath(t *testing.T) {
 	body := ar.body
 	if w.Result().StatusCode != 200 {
 		t.Fatal("invalid status code", w.Result().StatusCode)
-	}
-	if tokenReceived != s.token.String() {
-		t.Errorf("token not sent, want '%s' got '%s'", s.token.String(), tokenReceived)
-	}
-	if urlPath != "/principal" {
-		t.Error("invalid ZMS URL path", urlPath)
 	}
 	var tr authn.TokenReview
 	err := json.Unmarshal(body.Bytes(), &tr)
@@ -147,14 +206,14 @@ func TestAuthnHappyPath(t *testing.T) {
 	if !reflect.DeepEqual(expected, tr.Status.User) {
 		t.Errorf("bad output, want %v got %v", expected, tr.Status.User)
 	}
-	s.containsLog("authn granted 'my.domain.my-name'")
+	s.containsLog("authn granted 'my.domain.foo'")
 	s.containsLog("-> user=my.domain.foo, uid=100, groups=[foo]")
 }
 
 func TestAuthnZMSReject(t *testing.T) {
 	s := newAuthnScaffold(t)
 	defer s.Close()
-	input := stdAuthnInput(s.token.String())
+	input := stdAuthnInput(getToken(t))
 	zmsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		m := struct{ Message string }{"Forbidden"}
 		w.WriteHeader(401)
@@ -180,11 +239,11 @@ func TestAuthnZMSReject(t *testing.T) {
 	if tr.Status.Authenticated {
 		t.Error("ZMS reject returned success auth!")
 	}
-	msg := "/principal returned 401 (Forbidden)"
+	msg := "ZTS returned status 401"
 	if !strings.Contains(tr.Status.Error, msg) {
 		t.Errorf("status log '%s' did not contain '%s'", tr.Status.Error, msg)
 	}
-	s.containsLog("authn denied 'my.domain.my-name'")
+	s.containsLog("authn denied 'my.domain.foo'")
 	s.containsLog(msg)
 }
 
@@ -261,7 +320,7 @@ func TestAuthnBadInputs(t *testing.T) {
 type errum struct {
 }
 
-func (e *errum) MapUser(ctx context.Context, p AthenzPrincipal) (authn.UserInfo, error) {
+func (e *errum) MapUser(ctx context.Context, token *zmssvctoken.NToken) (authn.UserInfo, error) {
 	return authn.UserInfo{}, errors.New("FOOBAR")
 }
 
@@ -270,15 +329,13 @@ func TestAuthnUserMappingError(t *testing.T) {
 	defer s.Close()
 	s.config.Mapper = &errum{}
 	s.config.LogFlags = LogTraceAthenz | LogTraceServer
-	ap := AthenzPrincipal{
-		Domain:  "my.domain",
-		Service: "foo",
-		Token:   stdToken().String(),
-	}
-	zmsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(testContext, w, ap)
+	ztsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ybase := zmssvctoken.YBase64{}
+		keyString := ybase.EncodeToString(rsaPublicKeyPEM)
+		w.Write([]byte(fmt.Sprintf(`{ "key": "%s" }`, keyString)))
+		return
 	})
-	ar := runAuthnTest(s, serialize(stdAuthnInput(s.token.String())), zmsHandler)
+	ar := runAuthnTest(s, serialize(stdAuthnInput(getToken(t))), ztsHandler)
 	code := 200
 	msg := "FOOBAR"
 	if ar.w.Code != code {
@@ -297,9 +354,7 @@ func TestAuthnUserMappingError(t *testing.T) {
 	for _, line := range []string{
 		"POST /authn",
 		"request body: {",
-		"response status: 200",
-		`response: {"Domain":"my.domain"`,
-		`authn denied 'my.domain.my-name'`,
+		`authn denied 'my.domain.foo'`,
 		"error=FOOBAR",
 	} {
 		s.containsLog(line)
