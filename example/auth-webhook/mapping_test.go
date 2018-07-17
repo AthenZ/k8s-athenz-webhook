@@ -18,8 +18,6 @@ import (
 	api "github.com/yahoo/k8s-athenz-webhook"
 	authn "k8s.io/api/authentication/v1beta1"
 	authz "k8s.io/api/authorization/v1beta1"
-
-	"github.com/yahoo/athenz/libs/go/zmssvctoken"
 )
 
 var testContext = context.Background()
@@ -55,11 +53,7 @@ func TestMapSystemNs(t *testing.T) {
 
 func TestMapUserMapping(t *testing.T) {
 	m := &UserMapper{Groups: []string{"foo"}}
-	token := &zmssvctoken.NToken{
-		Domain: "my.domain",
-		Name:   "my-service",
-	}
-	u, err := m.MapUser(testContext, token)
+	u, err := m.MapUser(testContext, "my.domain", "my-service")
 	if err != nil {
 		t.Fatal(err)
 	}

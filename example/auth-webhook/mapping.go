@@ -13,8 +13,6 @@ import (
 	api "github.com/yahoo/k8s-athenz-webhook"
 	authn "k8s.io/api/authentication/v1beta1"
 	authz "k8s.io/api/authorization/v1beta1"
-
-	"github.com/yahoo/athenz/libs/go/zmssvctoken"
 )
 
 // this file contains implementations for the user mapper,
@@ -32,8 +30,8 @@ type UserMapper struct {
 }
 
 // MapUser implements the UserMapper interface as documented for the type.
-func (d *UserMapper) MapUser(ctx context.Context, token *zmssvctoken.NToken) (authn.UserInfo, error) {
-	principal := fmt.Sprintf("%s.%s", token.Domain, token.Name)
+func (d *UserMapper) MapUser(ctx context.Context, domain, service string) (authn.UserInfo, error) {
+	principal := fmt.Sprintf("%s.%s", domain, service)
 	return authn.UserInfo{
 		Username: principal,
 		UID:      principal,
