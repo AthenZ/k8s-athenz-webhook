@@ -68,10 +68,10 @@ func getToken(t *testing.T) string {
 	return token
 }
 
-type mpfn func(ctx context.Context, token *zmssvctoken.NToken) (authn.UserInfo, error)
+type mpfn func(ctx context.Context, domain, service string) (authn.UserInfo, error)
 
-func (m mpfn) MapUser(ctx context.Context, token *zmssvctoken.NToken) (authn.UserInfo, error) {
-	return m(ctx, token)
+func (m mpfn) MapUser(ctx context.Context, domain, service string) (authn.UserInfo, error) {
+	return m(ctx, domain, service)
 }
 
 type authnScaffold struct {
@@ -103,9 +103,9 @@ func newAuthnScaffold(t *testing.T) *authnScaffold {
 			Timeout:     200 * time.Millisecond,
 			LogProvider: p,
 		},
-		Mapper: mpfn(func(ctx context.Context, token *zmssvctoken.NToken) (authn.UserInfo, error) {
+		Mapper: mpfn(func(ctx context.Context, domain, service string) (authn.UserInfo, error) {
 			return authn.UserInfo{
-				Username: token.Domain + "." + token.Name,
+				Username: domain + "." + service,
 				UID:      "100",
 				Groups:   []string{"foo"},
 			}, nil
@@ -215,7 +215,7 @@ func TestAuthnZMSReject(t *testing.T) {
 	defer s.Close()
 	input := stdAuthnInput(getToken(t))
 	zmsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		m := struct{ Message string }{"Forbidden"}
+		m := struct{ Message string }{"Unauthorized"}
 		w.WriteHeader(401)
 		writeJSON(testContext, w, m)
 	})
@@ -239,7 +239,7 @@ func TestAuthnZMSReject(t *testing.T) {
 	if tr.Status.Authenticated {
 		t.Error("ZMS reject returned success auth!")
 	}
-	msg := "ZTS returned status 401"
+	msg := "/principal returned 401 (Unauthorized)"
 	if !strings.Contains(tr.Status.Error, msg) {
 		t.Errorf("status log '%s' did not contain '%s'", tr.Status.Error, msg)
 	}
@@ -320,7 +320,7 @@ func TestAuthnBadInputs(t *testing.T) {
 type errum struct {
 }
 
-func (e *errum) MapUser(ctx context.Context, token *zmssvctoken.NToken) (authn.UserInfo, error) {
+func (e *errum) MapUser(ctx context.Context, domain, service string) (authn.UserInfo, error) {
 	return authn.UserInfo{}, errors.New("FOOBAR")
 }
 

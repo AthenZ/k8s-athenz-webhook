@@ -138,6 +138,23 @@ func (c *client) request(u string, data interface{}, validator func(body []byte)
 	return nil
 }
 
+// authenticate make a request assuming that the transport has been configured
+// to present the user's token and returns the response from Athenz.
+func (c *client) authenticate() (*AthenzPrincipal, error) {
+	u := fmt.Sprintf("%s/principal", c.zmsEndpoint)
+	var ap AthenzPrincipal
+	err := c.request(u, &ap, func(b []byte) error {
+		if ap.Domain == "" || ap.Service == "" {
+			return fmt.Errorf("GET %s unable to get domain and/or name from %s", u, b)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &ap, nil
+}
+
 // authorize returns true if the supplied principal has access to the resource and action. The initial check is done
 // against the zts endpoint. If that is unreachable, the check is retried against the zms endpoint.
 func (c *client) authorize(principal string, check AthenzAccessCheck) (bool, error) {

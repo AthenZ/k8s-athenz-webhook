@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	authn "k8s.io/api/authentication/v1beta1"
 )
@@ -78,15 +79,27 @@ func (a *authenticator) authenticate(ctx context.Context, nt *ntoken) (ts *authn
 		}
 	}
 
+	var u authn.UserInfo
+
 	token, err := a.Validator.Validate(nt.raw)
+	if err != nil && strings.Contains(err.Error(), "Unable to get public key from ZTS") {
+		var p *AthenzPrincipal
+		client := newClient(a.ZMSEndpoint, a.ZTSEndpoint, a.Timeout, xp)
+		p, err = client.authenticate()
+		if err != nil {
+			return a.deny(err)
+		}
+		u, err = a.Mapper.MapUser(ctx, p.Domain, p.Service)
+	} else if err != nil {
+		return a.deny(err)
+	} else {
+		u, err = a.Mapper.MapUser(ctx, token.Domain, token.Name)
+	}
+
 	if err != nil {
 		return a.deny(err)
 	}
 
-	u, err := a.Mapper.MapUser(ctx, token)
-	if err != nil {
-		return a.deny(err)
-	}
 	return &authn.TokenReviewStatus{
 		Authenticated: true,
 		User:          u,

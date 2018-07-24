@@ -69,7 +69,7 @@ type AthenzPrincipal struct {
 type UserMapper interface {
 	// MapUser maps an Athenz principal to a user info object.
 	// Returning an error will cause an authentication failure.
-	MapUser(ctx context.Context, t *zmssvctoken.NToken) (authn.UserInfo, error)
+	MapUser(ctx context.Context, domain, service string) (authn.UserInfo, error)
 }
 
 // AthenzAccessCheck encapsulates the parameters for an authz check against Athenz.
