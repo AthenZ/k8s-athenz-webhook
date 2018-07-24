@@ -215,7 +215,7 @@ func TestAuthnZMSReject(t *testing.T) {
 	defer s.Close()
 	input := stdAuthnInput(getToken(t))
 	zmsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		m := struct{ Message string }{"Forbidden"}
+		m := struct{ Message string }{"Unauthorized"}
 		w.WriteHeader(401)
 		writeJSON(testContext, w, m)
 	})
@@ -239,7 +239,7 @@ func TestAuthnZMSReject(t *testing.T) {
 	if tr.Status.Authenticated {
 		t.Error("ZMS reject returned success auth!")
 	}
-	msg := "/principal returned 401 (Forbidden)"
+	msg := "/principal returned 401 (Unauthorized)"
 	if !strings.Contains(tr.Status.Error, msg) {
 		t.Errorf("status log '%s' did not contain '%s'", tr.Status.Error, msg)
 	}
