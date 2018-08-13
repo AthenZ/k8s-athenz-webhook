@@ -163,7 +163,7 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 		if err != nil {
 			return deny(NewAuthzError(err, internal), true)
 		}
-		granted, err = client.authorize(principal, check)
+		granted, err = client.authorize(ctx, principal, check)
 		if err != nil {
 			switch e := err.(type) {
 			case *statusCodeError:

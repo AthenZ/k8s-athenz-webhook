@@ -252,7 +252,7 @@ func TestClientAuthorize(t *testing.T) {
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := newClient(server.URL, server.URL, 200*time.Millisecond, http.DefaultTransport)
-	granted, err := client.authorize("me", AthenzAccessCheck{Resource: "d:service", Action: "read"})
+	granted, err := client.authorize(context.Background(), "me", AthenzAccessCheck{Resource: "d:service", Action: "read"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +265,7 @@ func TestClientAuthorizeFail(t *testing.T) {
 	server := httptest.NewServer(nil)
 	server.Close()
 	client := newClient(server.URL, server.URL, 200*time.Millisecond, http.DefaultTransport)
-	granted, err := client.authorize("me", AthenzAccessCheck{Resource: "d:service", Action: "read"})
+	granted, err := client.authorize(context.Background(), "me", AthenzAccessCheck{Resource: "d:service", Action: "read"})
 	if err == nil {
 		t.Fatal("expected error, got success")
 	}
