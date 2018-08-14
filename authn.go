@@ -71,18 +71,21 @@ func (a *authenticator) getNToken(tok string) (*ntoken, error) {
 }
 
 func (a *authenticator) authenticate(ctx context.Context, nt *ntoken) (ts *authn.TokenReviewStatus) {
+	log := getLogger(ctx)
 	xp := newAuthTransport(a.AuthHeader, nt.raw)
 	if isLogEnabled(ctx, LogTraceAthenz) {
 		xp = &debugTransport{
 			RoundTripper: xp,
-			log:          getLogger(ctx),
+			log:          log,
 		}
 	}
 
 	var u authn.UserInfo
-
 	token, err := a.Validator.Validate(nt.raw)
 	if err != nil && strings.Contains(err.Error(), "Unable to get public key from ZTS") {
+		log.Println("Validation of ntoken failed:", err)
+		log.Println("Retrying validation against the zms principal endpoint.")
+
 		var p *AthenzPrincipal
 		client := newClient(a.ZMSEndpoint, a.ZTSEndpoint, a.Timeout, xp)
 		p, err = client.authenticate()

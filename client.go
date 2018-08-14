@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -157,7 +158,7 @@ func (c *client) authenticate() (*AthenzPrincipal, error) {
 
 // authorize returns true if the supplied principal has access to the resource and action. The initial check is done
 // against the zts endpoint. If that is unreachable, the check is retried against the zms endpoint.
-func (c *client) authorize(principal string, check AthenzAccessCheck) (bool, error) {
+func (c *client) authorize(ctx context.Context, principal string, check AthenzAccessCheck) (bool, error) {
 	var authzResponse struct {
 		Granted bool `json:"granted"`
 	}
@@ -166,6 +167,13 @@ func (c *client) authorize(principal string, check AthenzAccessCheck) (bool, err
 	err := c.request(u, &authzResponse, nil)
 	if err != nil {
 		authzResponse.Granted = false
+		if err, ok := err.(*statusCodeError); ok {
+			if err.code == http.StatusNotFound {
+				return false, err
+			}
+		}
+
+		getLogger(ctx).Printf("Failed contacting zts, retrying with zms... err: %s", err.Error())
 		u := fmt.Sprintf("%s/access/%s/%s?principal=%s", c.zmsEndpoint, esc(check.Action), esc(check.Resource), esc(principal))
 		err := c.request(u, &authzResponse, nil)
 		if err != nil {
