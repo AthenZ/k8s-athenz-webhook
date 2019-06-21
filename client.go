@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -158,10 +160,40 @@ func (c *client) authenticate() (*AthenzPrincipal, error) {
 
 // authorize returns true if the supplied principal has access to the resource and action. The initial check is done
 // against the zts endpoint. If that is unreachable, the check is retried against the zms endpoint.
-func (c *client) authorize(ctx context.Context, principal string, check AthenzAccessCheck) (bool, error) {
+func (c *client) authorize(ctx context.Context, principal string, check AthenzAccessCheck, config Config) (bool, error) {
 	var authzResponse struct {
 		Granted bool `json:"granted"`
 	}
+
+	if config.UseCache {
+		domainName := strings.Split(check.Resource, ":")
+		if len(domainName) != 2 {
+			return false, errors.New("Error splitting domain name")
+		}
+
+		crMap := *config.Cache.DomainMap
+		domainData := crMap[domainName[0]]
+		roles := domainData.PrincipalToRoles[principal]
+
+		for _, r := range roles {
+			policies := domainData.RoleToAssertion[r]
+			for _, assert := range policies {
+				resources := strings.Split(assert.resource, ":")
+				star := ""
+				if len(resources) == 2 {
+					star = resources[1]
+				}
+				if assert.resource == check.Resource || star == "*" {
+					for _, act := range assert.action {
+						if act == check.Action || act == "*" {
+							return true, nil
+						}
+					}
+				}
+			}
+		}
+	}
+
 	esc := url.PathEscape
 	u := fmt.Sprintf("%s/access/%s/%s?principal=%s", c.ztsEndpoint, esc(check.Action), esc(check.Resource), esc(principal))
 	err := c.request(u, &authzResponse, nil)
