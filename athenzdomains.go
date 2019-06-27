@@ -2,7 +2,10 @@ package webhook
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 
+	"github.com/yahoo/athenz/clients/go/zms"
 	v1 "github.com/yahoo/k8s-athenz-istio-auth/pkg/apis/athenz/v1"
 	athenzClientset "github.com/yahoo/k8s-athenz-istio-auth/pkg/client/clientset/versioned"
 	athenzInformer "github.com/yahoo/k8s-athenz-istio-auth/pkg/client/informers/externalversions/athenz/v1"
@@ -11,16 +14,21 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+var (
+	replacer = strings.NewReplacer(".*", ".*", "*", ".*")
+)
+
 // CRMap - cr cache
 type CRMap struct {
-	PrincipalToRoles map[string][]string
+	RoleToPrincipals map[string][]*zms.RoleMember
 	RoleToAssertion  map[string][]SimpleAssertion
 }
 
-// SimpleAssertion - simplified policy
+// SimpleAssertion - processed policy
 type SimpleAssertion struct {
-	action   []string
-	resource string
+	resource *regexp.Regexp
+	action   *regexp.Regexp
+	effect   string
 }
 
 // Cache - cache for athenzdomains CR
@@ -77,13 +85,7 @@ func BuildCache() (*Cache, error) {
 func parseData(domainMap map[string]CRMap, domainName string, item *v1.AthenzDomain) {
 	crMap := domainMap[domainName]
 	for _, role := range item.Spec.SignedDomain.Domain.Roles {
-		for _, member := range role.Members {
-			_, ok := crMap.PrincipalToRoles[string(member)]
-			if !ok {
-				crMap.PrincipalToRoles[string(member)] = []string{}
-			}
-			crMap.PrincipalToRoles[string(member)] = append(crMap.PrincipalToRoles[string(member)], string(role.Name))
-		}
+		crMap.RoleToPrincipals[string(role.Name)] = role.RoleMembers
 	}
 
 	for _, policy := range item.Spec.SignedDomain.Domain.Policies.Contents.Policies {
@@ -92,17 +94,19 @@ func parseData(domainMap map[string]CRMap, domainName string, item *v1.AthenzDom
 			if !ok {
 				crMap.RoleToAssertion[assertion.Role] = []SimpleAssertion{}
 			}
-			// if resource is found in role's list, append the allowed action
-			for _, v := range crMap.RoleToAssertion[assertion.Role] {
-				effect := *assertion.Effect
-				if v.resource == assertion.Resource && effect.String() == "ALLOW" {
-					v.action = append(v.action, assertion.Action)
-				}
+			effect := assertion.Effect.String()
+			resourceRegex, err := regexp.Compile("^" + replacer.Replace(strings.ToLower(assertion.Resource)) + "$")
+			if err != nil {
+				fmt.Println("Error occurred when converting assertion resource into regex format. Error: %v", err)
 			}
-			// if resource is not found, then create new simpleAssertion
+			actionRegex, err := regexp.Compile("^" + replacer.Replace(strings.ToLower(assertion.Action)) + "$")
+			if err != nil {
+				fmt.Println("Error occurred when converting assertion action into regex format. Error: %v", err)
+			}
 			simpleAssert := SimpleAssertion{
-				resource: assertion.Resource,
-				action:   []string{assertion.Action},
+				resource: resourceRegex,
+				action:   actionRegex,
+				effect:   effect,
 			}
 			crMap.RoleToAssertion[assertion.Role] = append(crMap.RoleToAssertion[assertion.Role], simpleAssert)
 		}
@@ -114,10 +118,10 @@ func addObj(domainMap map[string]CRMap, item *v1.AthenzDomain) {
 	domainName := item.ObjectMeta.Name
 	_, ok := domainMap[domainName]
 	if !ok {
-		principalToRoles := make(map[string][]string)
+		roleToPrincipals := make(map[string][]*zms.RoleMember)
 		roleToAssertion := make(map[string][]SimpleAssertion)
 		crMap := CRMap{
-			PrincipalToRoles: principalToRoles,
+			RoleToPrincipals: roleToPrincipals,
 			RoleToAssertion:  roleToAssertion,
 		}
 		domainMap[domainName] = crMap
@@ -131,10 +135,10 @@ func updateObj(domainMap map[string]CRMap, item *v1.AthenzDomain) {
 	if ok {
 		delete(domainMap, domainName)
 	}
-	principalToRoles := make(map[string][]string)
+	roleToPrincipals := make(map[string][]*zms.RoleMember)
 	roleToAssertion := make(map[string][]SimpleAssertion)
 	crMap := CRMap{
-		PrincipalToRoles: principalToRoles,
+		RoleToPrincipals: roleToPrincipals,
 		RoleToAssertion:  roleToAssertion,
 	}
 	domainMap[domainName] = crMap
