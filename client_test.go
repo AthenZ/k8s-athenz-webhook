@@ -7,9 +7,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yahoo/athenz/clients/go/zms"
 )
 
 func TestAuthTransport(t *testing.T) {
@@ -252,7 +255,15 @@ func TestClientAuthorize(t *testing.T) {
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := newClient(server.URL, server.URL, 200*time.Millisecond, http.DefaultTransport)
-	granted, err := client.authorize(context.Background(), "me", AthenzAccessCheck{Resource: "d:service", Action: "read"})
+	c := AuthenticationConfig{
+		Config: Config{
+			AuthHeader: "X-Auth",
+			Timeout:    200 * time.Millisecond,
+			Cache:      &Cache{},
+			UseCache:   false,
+		},
+	}
+	granted, err := client.authorize(context.Background(), "me", AthenzAccessCheck{Resource: "d:service", Action: "read"}, c.Config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,11 +276,66 @@ func TestClientAuthorizeFail(t *testing.T) {
 	server := httptest.NewServer(nil)
 	server.Close()
 	client := newClient(server.URL, server.URL, 200*time.Millisecond, http.DefaultTransport)
-	granted, err := client.authorize(context.Background(), "me", AthenzAccessCheck{Resource: "d:service", Action: "read"})
+	c := AuthenticationConfig{
+		Config: Config{
+			AuthHeader: "X-Auth",
+			Timeout:    200 * time.Millisecond,
+			Cache:      &Cache{},
+			UseCache:   false,
+		},
+	}
+	granted, err := client.authorize(context.Background(), "me", AthenzAccessCheck{Resource: "d:service", Action: "read"}, c.Config)
 	if err == nil {
 		t.Fatal("expected error, got success")
 	}
 	if granted {
+		t.Error("bad grant flag")
+	}
+}
+
+func TestUseCache(t *testing.T) {
+	domainMap := make(map[string]CRMap)
+	domainName := "home.domain"
+	roleToPrincipals := make(map[string][]*zms.RoleMember)
+	roleToPrincipals["home.user"] = []*zms.RoleMember{
+		{
+			MemberName: zms.MemberName("user.test"),
+		},
+	}
+	roleToAssertion := make(map[string][]SimpleAssertion)
+	resourceRegex, _ := regexp.Compile("^" + replacer.Replace(strings.ToLower(string("home.domain:*"))) + "$")
+	actionRegex, _ := regexp.Compile("^" + replacer.Replace(strings.ToLower(string("*"))) + "$")
+	roleToAssertion["home.user"] = []SimpleAssertion{
+		{
+			resource: resourceRegex,
+			action:   actionRegex,
+			effect:   "ALLOW",
+		},
+	}
+	crMap := CRMap{
+		RoleToPrincipals: roleToPrincipals,
+		RoleToAssertion:  roleToAssertion,
+	}
+	domainMap[domainName] = crMap
+	cache := &Cache{
+		DomainMap: &domainMap,
+	}
+	server := httptest.NewServer(nil)
+	server.Close()
+	client := newClient(server.URL, server.URL, 200*time.Millisecond, http.DefaultTransport)
+	c := AuthenticationConfig{
+		Config: Config{
+			AuthHeader: "X-Auth",
+			Timeout:    200 * time.Millisecond,
+			Cache:      cache,
+			UseCache:   true,
+		},
+	}
+	granted, err := client.authorize(context.Background(), "user.test", AthenzAccessCheck{Resource: "home.domain:pods", Action: "get"}, c.Config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !granted {
 		t.Error("bad grant flag")
 	}
 }

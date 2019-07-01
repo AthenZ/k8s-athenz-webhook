@@ -97,11 +97,11 @@ func parseData(domainMap map[string]CRMap, domainName string, item *v1.AthenzDom
 			effect := assertion.Effect.String()
 			resourceRegex, err := regexp.Compile("^" + replacer.Replace(strings.ToLower(assertion.Resource)) + "$")
 			if err != nil {
-				fmt.Println("Error occurred when converting assertion resource into regex format. Error: %v", err)
+				fmt.Printf("Error occurred when converting assertion resource into regex format. Error: %v", err)
 			}
 			actionRegex, err := regexp.Compile("^" + replacer.Replace(strings.ToLower(assertion.Action)) + "$")
 			if err != nil {
-				fmt.Println("Error occurred when converting assertion action into regex format. Error: %v", err)
+				fmt.Printf("Error occurred when converting assertion action into regex format. Error: %v", err)
 			}
 			simpleAssert := SimpleAssertion{
 				resource: resourceRegex,
