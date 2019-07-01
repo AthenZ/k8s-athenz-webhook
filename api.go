@@ -56,6 +56,7 @@ func GetLogger(ctx context.Context) Logger {
 // IdentityToken provides an ntoken for Athenz access for the authorization handler itself.
 type IdentityToken func() (string, error)
 
+// IdentityAthenzX509 provides x509 certs for Athenz access
 type IdentityAthenzX509 func() (*tls.Config, error)
 
 // AthenzPrincipal represents a valid Athenz principal.
