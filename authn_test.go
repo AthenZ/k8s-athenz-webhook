@@ -163,7 +163,7 @@ func TestAuthnHappyPath(t *testing.T) {
 	token := getToken(t)
 	input := stdAuthnInput(token)
 
-	var urlPath, tokenReceived string
+	// var urlPath, tokenReceived string
 	ap := AthenzPrincipal{
 		Domain:  "my.domain",
 		Service: "foo",
@@ -177,8 +177,8 @@ func TestAuthnHappyPath(t *testing.T) {
 			return
 		}
 
-		tokenReceived = r.Header.Get("X-Auth")
-		urlPath = r.URL.Path
+		// tokenReceived = r.Header.Get("X-Auth")
+		// urlPath = r.URL.Path
 		writeJSON(testContext, w, ap)
 	})
 	ar := runAuthnTest(s, serialize(input), zmsHandler)
