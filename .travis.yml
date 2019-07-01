@@ -1,20 +1,16 @@
 language: go
-sudo: false
+env:
+- GO111MODULE=on
 
-matrix:
-  include:
-    - go: 1.8
-    - go: 1.9
-    - go: tip
-  allow_failures:
-    - go: tip
-
-before_install:
-  - go get github.com/mattn/goveralls
+go:
+- 1.12.x
 
 script:
-  - go get -t -d -v ./...
-  - go install ./...
-  - diff -u <(echo -n) <(gofmt -d .)
-  - go vet $(go list ./... | grep -v /vendor/)
-  - if [[ "${TRAVIS_GO_VERSION}" =~ ^1\.9 ]]; then ${GOPATH}/bin/goveralls -v -service=travis-ci; else go test -v ./...; fi
+- go build -v -race ./...
+- diff -u <(echo -n) <(gofmt -d .)
+- go vet ./...
+- go test -v -race ./...
+
+branches:
+  only: 
+    - master
