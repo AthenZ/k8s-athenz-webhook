@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/yahoo/athenz/clients/go/zms"
 	v1 "github.com/yahoo/k8s-athenz-istio-auth/pkg/apis/athenz/v1"
@@ -32,39 +33,40 @@ type SimpleAssertion struct {
 type Cache struct {
 	CrIndexInformer cache.SharedIndexInformer
 	DomainMap       map[string]CRMap
+	lock            sync.RWMutex
 }
 
 // BuildCache - generate new athenzdomains cr cache
 func BuildCache(crIndexInformer cache.SharedIndexInformer) *Cache {
 	fmt.Println("Start building AthenzDomain map cache")
 	domainMap := make(map[string]CRMap)
+	c := &Cache{
+		CrIndexInformer: crIndexInformer,
+		DomainMap:       domainMap,
+	}
 	crIndexInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			item, ok := obj.(*v1.AthenzDomain)
 			if !ok {
 				fmt.Println("Unable to convert informer store item into AthenzDomain type.")
 			}
-			addObj(domainMap, item)
+			c.addObj(domainMap, item)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			newItem, ok := newObj.(*v1.AthenzDomain)
 			if !ok {
 				fmt.Println("Unable to convert informer store item into AthenzDomain type.")
 			}
-			updateObj(domainMap, newItem)
+			c.updateObj(domainMap, newItem)
 		},
 		DeleteFunc: func(obj interface{}) {
 			item, ok := obj.(*v1.AthenzDomain)
 			if !ok {
 				fmt.Println("Unable to convert informer store item into AthenzDomain type.")
 			}
-			deleteObj(domainMap, item)
+			c.deleteObj(domainMap, item)
 		},
 	})
-	c := &Cache{
-		CrIndexInformer: crIndexInformer,
-		DomainMap:       domainMap,
-	}
 	return c
 }
 
@@ -100,7 +102,8 @@ func parseData(domainMap map[string]CRMap, domainName string, item *v1.AthenzDom
 	}
 }
 
-func addObj(domainMap map[string]CRMap, item *v1.AthenzDomain) {
+func (c *Cache) addObj(domainMap map[string]CRMap, item *v1.AthenzDomain) {
+	c.lock.Lock()
 	domainName := item.ObjectMeta.Name
 	_, ok := domainMap[domainName]
 	if !ok {
@@ -113,9 +116,11 @@ func addObj(domainMap map[string]CRMap, item *v1.AthenzDomain) {
 		domainMap[domainName] = crMap
 	}
 	parseData(domainMap, domainName, item)
+	c.lock.Unlock()
 }
 
-func updateObj(domainMap map[string]CRMap, item *v1.AthenzDomain) {
+func (c *Cache) updateObj(domainMap map[string]CRMap, item *v1.AthenzDomain) {
+	c.lock.Lock()
 	domainName := item.ObjectMeta.Name
 	_, ok := domainMap[domainName]
 	if ok {
@@ -129,14 +134,17 @@ func updateObj(domainMap map[string]CRMap, item *v1.AthenzDomain) {
 	}
 	domainMap[domainName] = crMap
 	parseData(domainMap, domainName, item)
+	c.lock.Unlock()
 }
 
-func deleteObj(domainMap map[string]CRMap, item *v1.AthenzDomain) {
+func (c *Cache) deleteObj(domainMap map[string]CRMap, item *v1.AthenzDomain) {
+	c.lock.Lock()
 	domainName := item.ObjectMeta.Name
 	_, ok := domainMap[domainName]
 	if ok {
 		delete(domainMap, domainName)
 	}
+	c.lock.Unlock()
 }
 
 func (c *Cache) authorize(ctx context.Context, principal string, check AthenzAccessCheck) {
@@ -145,6 +153,7 @@ func (c *Cache) authorize(ctx context.Context, principal string, check AthenzAcc
 		fmt.Println("Error splitting domain name")
 	}
 
+	c.lock.RLock()
 	crMap := c.DomainMap
 	domainData := crMap[domainName[0]]
 	roles := []string{}
@@ -170,4 +179,5 @@ func (c *Cache) authorize(ctx context.Context, principal string, check AthenzAcc
 		}
 	}
 	fmt.Println("Authorization failed")
+	c.lock.RUnlock()
 }

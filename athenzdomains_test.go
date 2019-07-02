@@ -66,8 +66,15 @@ func getFakeDomain() zms.SignedDomain {
 	}
 }
 
-func TestParseData(t *testing.T) {
+func newCache() *Cache {
 	domainMap := make(map[string]CRMap)
+	return &Cache{
+		DomainMap: domainMap,
+	}
+}
+
+func TestParseData(t *testing.T) {
+	c := newCache()
 	domainName := "home.domain"
 	roleToPrincipals := make(map[string][]*zms.RoleMember)
 	roleToAssertion := make(map[string][]SimpleAssertion)
@@ -75,15 +82,15 @@ func TestParseData(t *testing.T) {
 		RoleToPrincipals: roleToPrincipals,
 		RoleToAssertion:  roleToAssertion,
 	}
-	domainMap[domainName] = crMap
+	c.DomainMap[domainName] = crMap
 	spec := v1.AthenzDomainSpec{
 		SignedDomain: getFakeDomain(),
 	}
 	item := &v1.AthenzDomain{
 		Spec: spec,
 	}
-	parseData(domainMap, domainName, item)
-	crMap, ok := domainMap[domainName]
+	parseData(c.DomainMap, domainName, item)
+	crMap, ok := c.DomainMap[domainName]
 	if !ok {
 		t.Error("Failed to add domain data to map")
 	}
@@ -97,7 +104,7 @@ func TestParseData(t *testing.T) {
 }
 
 func TestAddObj(t *testing.T) {
-	domainMap := make(map[string]CRMap)
+	c := newCache()
 	spec := v1.AthenzDomainSpec{
 		SignedDomain: getFakeDomain(),
 	}
@@ -107,8 +114,8 @@ func TestAddObj(t *testing.T) {
 		},
 		Spec: spec,
 	}
-	addObj(domainMap, item)
-	obj, ok := domainMap[domainName]
+	c.addObj(c.DomainMap, item)
+	obj, ok := c.DomainMap[domainName]
 	if !ok {
 		t.Error("Failed to add AthenzDomain to domainMap")
 	}
@@ -119,7 +126,7 @@ func TestAddObj(t *testing.T) {
 
 func TestUpdateObj(t *testing.T) {
 	timestamp, _ := rdl.TimestampParse("2019-06-21T19:28:09.305Z")
-	domainMap := make(map[string]CRMap)
+	c := newCache()
 	spec := v1.AthenzDomainSpec{
 		SignedDomain: getFakeDomain(),
 	}
@@ -129,8 +136,8 @@ func TestUpdateObj(t *testing.T) {
 		},
 		Spec: spec,
 	}
-	addObj(domainMap, item)
-	_, ok := domainMap[domainName]
+	c.addObj(c.DomainMap, item)
+	_, ok := c.DomainMap[domainName]
 	if !ok {
 		t.Error("Failed to create AthenzDomain to domainMap")
 	}
@@ -156,8 +163,8 @@ func TestUpdateObj(t *testing.T) {
 			},
 		},
 	}
-	updateObj(domainMap, item)
-	crMap, ok := domainMap[domainName]
+	c.updateObj(c.DomainMap, item)
+	crMap, ok := c.DomainMap[domainName]
 	if !ok {
 		t.Error("Failed to keep AthenzDomain to domainMap")
 	}
@@ -168,7 +175,7 @@ func TestUpdateObj(t *testing.T) {
 }
 
 func TestDeleteObj(t *testing.T) {
-	domainMap := make(map[string]CRMap)
+	c := newCache()
 	spec := v1.AthenzDomainSpec{
 		SignedDomain: getFakeDomain(),
 	}
@@ -178,13 +185,13 @@ func TestDeleteObj(t *testing.T) {
 		},
 		Spec: spec,
 	}
-	addObj(domainMap, item)
-	_, ok := domainMap[domainName]
+	c.addObj(c.DomainMap, item)
+	_, ok := c.DomainMap[domainName]
 	if !ok {
 		t.Error("Failed to add AthenzDomain to domainMap")
 	}
-	deleteObj(domainMap, item)
-	_, ok = domainMap[domainName]
+	c.deleteObj(c.DomainMap, item)
+	_, ok = c.DomainMap[domainName]
 	if ok {
 		t.Error("Failed to delete AthenzDomain to domainMap")
 	}
