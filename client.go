@@ -4,13 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"regexp"
-	"strings"
 	"time"
 )
 
@@ -167,36 +164,8 @@ func (c *client) authorize(ctx context.Context, principal string, check AthenzAc
 	}
 
 	if config.UseCache {
-		domainName := strings.Split(check.Resource, ":")
-		if len(domainName) != 2 {
-			return false, errors.New("Error splitting domain name")
-		}
-
-		crMap := *config.Cache.DomainMap
-		domainData := crMap[domainName[0]]
-		roles := []string{}
-		for roleName, member := range domainData.RoleToPrincipals {
-			for _, m := range member {
-				memberRegex, err := regexp.Compile("^" + replacer.Replace(strings.ToLower(string(m.MemberName))) + "$")
-				fmt.Println(memberRegex)
-				if err != nil {
-					fmt.Printf("Error occurred when converting memberNames in roleMember list into regex format. Error: %v", err)
-				}
-				if memberRegex.MatchString(principal) {
-					roles = append(roles, roleName)
-				}
-			}
-		}
-
-		for _, r := range roles {
-			policies := domainData.RoleToAssertion[r]
-			for _, assert := range policies {
-				if assert.resource.MatchString(check.Resource) && assert.action.MatchString(check.Action) && assert.effect == "ALLOW" {
-					fmt.Println("Success!")
-					return true, nil
-				}
-			}
-		}
+		cache := config.Cache
+		cache.authorize(ctx, principal, check)
 	}
 
 	esc := url.PathEscape

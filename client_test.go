@@ -318,7 +318,7 @@ func TestUseCache(t *testing.T) {
 	}
 	domainMap[domainName] = crMap
 	cache := &Cache{
-		DomainMap: &domainMap,
+		DomainMap: domainMap,
 	}
 	server := httptest.NewServer(nil)
 	server.Close()

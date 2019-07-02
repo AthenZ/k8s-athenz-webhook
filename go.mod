@@ -3,6 +3,7 @@ module github.com/yahoo/k8s-athenz-webhook
 go 1.12
 
 require (
+	github.com/ardielle/ardielle-go v1.5.2
 	github.com/google/gofuzz v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.6 // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect

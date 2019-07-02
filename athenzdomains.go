@@ -1,16 +1,13 @@
 package webhook
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
 
 	"github.com/yahoo/athenz/clients/go/zms"
 	v1 "github.com/yahoo/k8s-athenz-istio-auth/pkg/apis/athenz/v1"
-	athenzClientset "github.com/yahoo/k8s-athenz-istio-auth/pkg/client/clientset/versioned"
-	athenzInformer "github.com/yahoo/k8s-athenz-istio-auth/pkg/client/informers/externalversions/athenz/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -34,23 +31,12 @@ type SimpleAssertion struct {
 // Cache - cache for athenzdomains CR
 type Cache struct {
 	CrIndexInformer cache.SharedIndexInformer
-	DomainMap       *map[string]CRMap
+	DomainMap       map[string]CRMap
 }
 
 // BuildCache - generate new athenzdomains cr cache
-func BuildCache() (*Cache, error) {
-	fmt.Println("Start build cache")
-	config := &rest.Config{}
-	config.Host = "https://localhost:9999"
-	config.CertFile = "/etc/ssl/certs/kube-apiserver.pem"
-	config.KeyFile = "/etc/pki/tls/private/kube-apiserver-key.pem"
-	config.CAFile = "/etc/ssl/certs/ca.pem"
-	clientSet, err := athenzClientset.NewForConfig(config)
-	if err != nil {
-		fmt.Println("failed to create athenzdomains client")
-		return nil, err
-	}
-	crIndexInformer := athenzInformer.NewAthenzDomainInformer(clientSet, corev1.NamespaceAll, 0, cache.Indexers{})
+func BuildCache(crIndexInformer cache.SharedIndexInformer) *Cache {
+	fmt.Println("Start building AthenzDomain map cache")
 	domainMap := make(map[string]CRMap)
 	crIndexInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
@@ -77,9 +63,9 @@ func BuildCache() (*Cache, error) {
 	})
 	c := &Cache{
 		CrIndexInformer: crIndexInformer,
-		DomainMap:       &domainMap,
+		DomainMap:       domainMap,
 	}
-	return c, nil
+	return c
 }
 
 func parseData(domainMap map[string]CRMap, domainName string, item *v1.AthenzDomain) {
@@ -151,4 +137,37 @@ func deleteObj(domainMap map[string]CRMap, item *v1.AthenzDomain) {
 	if ok {
 		delete(domainMap, domainName)
 	}
+}
+
+func (c *Cache) authorize(ctx context.Context, principal string, check AthenzAccessCheck) {
+	domainName := strings.Split(check.Resource, ":")
+	if len(domainName) != 2 {
+		fmt.Println("Error splitting domain name")
+	}
+
+	crMap := c.DomainMap
+	domainData := crMap[domainName[0]]
+	roles := []string{}
+	for roleName, member := range domainData.RoleToPrincipals {
+		for _, m := range member {
+			memberRegex, err := regexp.Compile("^" + replacer.Replace(strings.ToLower(string(m.MemberName))) + "$")
+			fmt.Println(memberRegex)
+			if err != nil {
+				fmt.Printf("Error occurred when converting memberNames in roleMember list into regex format. Error: %v", err)
+			}
+			if memberRegex.MatchString(principal) {
+				roles = append(roles, roleName)
+			}
+		}
+	}
+
+	for _, r := range roles {
+		policies := domainData.RoleToAssertion[r]
+		for _, assert := range policies {
+			if assert.resource.MatchString(check.Resource) && assert.action.MatchString(check.Action) && assert.effect == "ALLOW" {
+				fmt.Println("Authorization successful using cache data")
+			}
+		}
+	}
+	fmt.Println("Authorization failed")
 }
