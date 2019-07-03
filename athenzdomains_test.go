@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/ardielle/ardielle-go/rdl"
@@ -67,7 +68,7 @@ func getFakeDomain() zms.SignedDomain {
 }
 
 func newCache() *Cache {
-	domainMap := make(map[string]CRMap)
+	domainMap := make(map[string]roleMappings)
 	return &Cache{
 		DomainMap: domainMap,
 	}
@@ -76,11 +77,11 @@ func newCache() *Cache {
 func TestParseData(t *testing.T) {
 	c := newCache()
 	domainName := "home.domain"
-	roleToPrincipals := make(map[string][]*zms.RoleMember)
-	roleToAssertion := make(map[string][]SimpleAssertion)
-	crMap := CRMap{
-		RoleToPrincipals: roleToPrincipals,
-		RoleToAssertion:  roleToAssertion,
+	roleToPrincipals := make(map[string][]*regexp.Regexp)
+	roleToAssertion := make(map[string][]*simpleAssertion)
+	crMap := roleMappings{
+		roleToPrincipals: roleToPrincipals,
+		roleToAssertion:  roleToAssertion,
 	}
 	c.DomainMap[domainName] = crMap
 	spec := v1.AthenzDomainSpec{
@@ -94,11 +95,11 @@ func TestParseData(t *testing.T) {
 	if !ok {
 		t.Error("Failed to add domain data to map")
 	}
-	if len(crMap.RoleToPrincipals) != 1 || crMap.RoleToPrincipals["home.domain:role.admin"] == nil {
+	if len(crMap.roleToPrincipals) != 1 || crMap.roleToPrincipals["home.domain:role.admin"] == nil {
 		t.Error("Failed to create RoleToPrincipals map")
 	}
 
-	if len(crMap.RoleToAssertion) != 1 || crMap.RoleToPrincipals["home.domain:role.admin"] == nil {
+	if len(crMap.roleToAssertion) != 1 || crMap.roleToPrincipals["home.domain:role.admin"] == nil {
 		t.Error("Failed to create RoleToAssertion map")
 	}
 }
@@ -114,12 +115,12 @@ func TestAddObj(t *testing.T) {
 		},
 		Spec: spec,
 	}
-	c.addObj(c.DomainMap, item)
+	c.addObj(item)
 	obj, ok := c.DomainMap[domainName]
 	if !ok {
 		t.Error("Failed to add AthenzDomain to domainMap")
 	}
-	if len(obj.RoleToPrincipals["home.domain:role.admin"]) != 1 {
+	if len(obj.roleToPrincipals["home.domain:role.admin"]) != 1 {
 		t.Error("Failed to add AthenzDomain to domainMap. RoleToPrincipals is empty.")
 	}
 }
@@ -136,7 +137,7 @@ func TestUpdateObj(t *testing.T) {
 		},
 		Spec: spec,
 	}
-	c.addObj(c.DomainMap, item)
+	c.addObj(item)
 	_, ok := c.DomainMap[domainName]
 	if !ok {
 		t.Error("Failed to create AthenzDomain to domainMap")
@@ -163,13 +164,13 @@ func TestUpdateObj(t *testing.T) {
 			},
 		},
 	}
-	c.updateObj(c.DomainMap, item)
+	c.updateObj(item)
 	crMap, ok := c.DomainMap[domainName]
 	if !ok {
 		t.Error("Failed to keep AthenzDomain to domainMap")
 	}
-	if len(crMap.RoleToPrincipals) != 2 {
-		t.Error(len(crMap.RoleToPrincipals))
+	if len(crMap.roleToPrincipals) != 2 {
+		t.Error(len(crMap.roleToPrincipals))
 		t.Error("Failed to update AthenzDomain roles")
 	}
 }
@@ -185,12 +186,12 @@ func TestDeleteObj(t *testing.T) {
 		},
 		Spec: spec,
 	}
-	c.addObj(c.DomainMap, item)
+	c.addObj(item)
 	_, ok := c.DomainMap[domainName]
 	if !ok {
 		t.Error("Failed to add AthenzDomain to domainMap")
 	}
-	c.deleteObj(c.DomainMap, item)
+	c.deleteObj(item)
 	_, ok = c.DomainMap[domainName]
 	if ok {
 		t.Error("Failed to delete AthenzDomain to domainMap")

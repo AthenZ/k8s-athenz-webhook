@@ -1,29 +1,29 @@
 package webhook
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"sync"
 
-	"github.com/yahoo/athenz/clients/go/zms"
 	v1 "github.com/yahoo/k8s-athenz-istio-auth/pkg/apis/athenz/v1"
 	"k8s.io/client-go/tools/cache"
 )
 
 var (
-	replacer = strings.NewReplacer(".*", ".*", "*", ".*")
+	replacer     = strings.NewReplacer(".*", ".*", "*", ".*")
+	privateCache *Cache
 )
 
-// CRMap - cr cache
-type CRMap struct {
-	RoleToPrincipals map[string][]*zms.RoleMember
-	RoleToAssertion  map[string][]SimpleAssertion
+// RoleMappings - cr cache
+type roleMappings struct {
+	roleToPrincipals map[string][]*regexp.Regexp
+	roleToAssertion  map[string][]*simpleAssertion
 }
 
 // SimpleAssertion - processed policy
-type SimpleAssertion struct {
+type simpleAssertion struct {
 	resource *regexp.Regexp
 	action   *regexp.Regexp
 	effect   string
@@ -32,15 +32,14 @@ type SimpleAssertion struct {
 // Cache - cache for athenzdomains CR
 type Cache struct {
 	CrIndexInformer cache.SharedIndexInformer
-	DomainMap       map[string]CRMap
+	DomainMap       map[string]roleMappings
 	lock            sync.RWMutex
 }
 
 // BuildCache - generate new athenzdomains cr cache
-func BuildCache(crIndexInformer cache.SharedIndexInformer) *Cache {
-	fmt.Println("Start building AthenzDomain map cache")
-	domainMap := make(map[string]CRMap)
-	c := &Cache{
+func BuildCache(crIndexInformer cache.SharedIndexInformer) {
+	domainMap := make(map[string]roleMappings)
+	privateCache = &Cache{
 		CrIndexInformer: crIndexInformer,
 		DomainMap:       domainMap,
 	}
@@ -49,38 +48,69 @@ func BuildCache(crIndexInformer cache.SharedIndexInformer) *Cache {
 			item, ok := obj.(*v1.AthenzDomain)
 			if !ok {
 				fmt.Println("Unable to convert informer store item into AthenzDomain type.")
+				return
 			}
-			c.addObj(domainMap, item)
+			privateCache.addObj(item)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			newItem, ok := newObj.(*v1.AthenzDomain)
 			if !ok {
 				fmt.Println("Unable to convert informer store item into AthenzDomain type.")
+				return
 			}
-			c.updateObj(domainMap, newItem)
+			privateCache.updateObj(newItem)
 		},
 		DeleteFunc: func(obj interface{}) {
 			item, ok := obj.(*v1.AthenzDomain)
 			if !ok {
 				fmt.Println("Unable to convert informer store item into AthenzDomain type.")
+				return
 			}
-			c.deleteObj(domainMap, item)
+			privateCache.deleteObj(item)
 		},
 	})
-	return c
 }
 
-func parseData(domainMap map[string]CRMap, domainName string, item *v1.AthenzDomain) {
+// parseData - helper function to parse AthenzDomain data and store it in domainMap
+func parseData(domainMap map[string]roleMappings, domainName string, item *v1.AthenzDomain) error {
 	crMap := domainMap[domainName]
+	if item == nil || item.Spec.SignedDomain.Domain == nil {
+		return errors.New("Some required fields are nil")
+	}
 	for _, role := range item.Spec.SignedDomain.Domain.Roles {
-		crMap.RoleToPrincipals[string(role.Name)] = role.RoleMembers
+		if role == nil {
+			continue
+		}
+		_, ok := crMap.roleToPrincipals[string(role.Name)]
+		if !ok {
+			crMap.roleToPrincipals[string(role.Name)] = []*regexp.Regexp{}
+		}
+		for _, roleMember := range role.RoleMembers {
+			if roleMember == nil {
+				continue
+			}
+			memberRegex, err := regexp.Compile("^" + replacer.Replace(strings.ToLower(string(roleMember.MemberName))) + "$")
+			if err != nil {
+				fmt.Printf("Error occurred when converting role memeber name into regex format. Error: %v", err)
+			}
+			crMap.roleToPrincipals[string(role.Name)] = append(crMap.roleToPrincipals[string(role.Name)], memberRegex)
+		}
 	}
 
+	if item == nil || item.Spec.SignedDomain.Domain == nil || item.Spec.SignedDomain.Domain.Policies == nil || item.Spec.SignedDomain.Domain.Policies.Contents == nil {
+		return errors.New("Some required fields are nil")
+	}
 	for _, policy := range item.Spec.SignedDomain.Domain.Policies.Contents.Policies {
+		if policy == nil {
+			continue
+		}
 		for _, assertion := range policy.Assertions {
-			_, ok := crMap.RoleToAssertion[assertion.Role]
+			if assertion == nil {
+				continue
+			}
+			_, ok := crMap.roleToAssertion[assertion.Role]
 			if !ok {
-				crMap.RoleToAssertion[assertion.Role] = []SimpleAssertion{}
+				crMap.roleToAssertion[assertion.Role] = []*simpleAssertion{}
 			}
 			effect := assertion.Effect.String()
 			resourceRegex, err := regexp.Compile("^" + replacer.Replace(strings.ToLower(assertion.Resource)) + "$")
@@ -91,79 +121,67 @@ func parseData(domainMap map[string]CRMap, domainName string, item *v1.AthenzDom
 			if err != nil {
 				fmt.Printf("Error occurred when converting assertion action into regex format. Error: %v", err)
 			}
-			simpleAssert := SimpleAssertion{
+			simpleAssert := simpleAssertion{
 				resource: resourceRegex,
 				action:   actionRegex,
 				effect:   effect,
 			}
-			crMap.RoleToAssertion[assertion.Role] = append(crMap.RoleToAssertion[assertion.Role], simpleAssert)
+			crMap.roleToAssertion[assertion.Role] = append(crMap.roleToAssertion[assertion.Role], &simpleAssert)
 		}
-
 	}
+	return nil
 }
 
-func (c *Cache) addObj(domainMap map[string]CRMap, item *v1.AthenzDomain) {
+func (c *Cache) addObj(item *v1.AthenzDomain) {
 	c.lock.Lock()
 	domainName := item.ObjectMeta.Name
-	_, ok := domainMap[domainName]
+	_, ok := c.DomainMap[domainName]
 	if !ok {
-		roleToPrincipals := make(map[string][]*zms.RoleMember)
-		roleToAssertion := make(map[string][]SimpleAssertion)
-		crMap := CRMap{
-			RoleToPrincipals: roleToPrincipals,
-			RoleToAssertion:  roleToAssertion,
+		roleToPrincipals := make(map[string][]*regexp.Regexp)
+		roleToAssertion := make(map[string][]*simpleAssertion)
+		crMap := roleMappings{
+			roleToPrincipals: roleToPrincipals,
+			roleToAssertion:  roleToAssertion,
 		}
-		domainMap[domainName] = crMap
+		c.DomainMap[domainName] = crMap
 	}
-	parseData(domainMap, domainName, item)
+	parseData(c.DomainMap, domainName, item)
 	c.lock.Unlock()
 }
 
-func (c *Cache) updateObj(domainMap map[string]CRMap, item *v1.AthenzDomain) {
+func (c *Cache) updateObj(item *v1.AthenzDomain) {
 	c.lock.Lock()
 	domainName := item.ObjectMeta.Name
-	_, ok := domainMap[domainName]
+	_, ok := c.DomainMap[domainName]
 	if ok {
-		delete(domainMap, domainName)
+		delete(c.DomainMap, domainName)
 	}
-	roleToPrincipals := make(map[string][]*zms.RoleMember)
-	roleToAssertion := make(map[string][]SimpleAssertion)
-	crMap := CRMap{
-		RoleToPrincipals: roleToPrincipals,
-		RoleToAssertion:  roleToAssertion,
-	}
-	domainMap[domainName] = crMap
-	parseData(domainMap, domainName, item)
+	c.addObj(item)
 	c.lock.Unlock()
 }
 
-func (c *Cache) deleteObj(domainMap map[string]CRMap, item *v1.AthenzDomain) {
+func (c *Cache) deleteObj(item *v1.AthenzDomain) {
 	c.lock.Lock()
 	domainName := item.ObjectMeta.Name
-	_, ok := domainMap[domainName]
+	_, ok := c.DomainMap[domainName]
 	if ok {
-		delete(domainMap, domainName)
+		delete(c.DomainMap, domainName)
 	}
 	c.lock.Unlock()
 }
 
-func (c *Cache) authorize(ctx context.Context, principal string, check AthenzAccessCheck) {
+func authorize(principal string, check AthenzAccessCheck) (bool, error) {
 	domainName := strings.Split(check.Resource, ":")
 	if len(domainName) != 2 {
-		fmt.Println("Error splitting domain name")
+		return false, errors.New("Error splitting domain name")
 	}
 
-	c.lock.RLock()
-	crMap := c.DomainMap
+	privateCache.lock.RLock()
+	crMap := privateCache.DomainMap
 	domainData := crMap[domainName[0]]
 	roles := []string{}
-	for roleName, member := range domainData.RoleToPrincipals {
-		for _, m := range member {
-			memberRegex, err := regexp.Compile("^" + replacer.Replace(strings.ToLower(string(m.MemberName))) + "$")
-			fmt.Println(memberRegex)
-			if err != nil {
-				fmt.Printf("Error occurred when converting memberNames in roleMember list into regex format. Error: %v", err)
-			}
+	for roleName, member := range domainData.roleToPrincipals {
+		for _, memberRegex := range member {
 			if memberRegex.MatchString(principal) {
 				roles = append(roles, roleName)
 			}
@@ -171,13 +189,13 @@ func (c *Cache) authorize(ctx context.Context, principal string, check AthenzAcc
 	}
 
 	for _, r := range roles {
-		policies := domainData.RoleToAssertion[r]
+		policies := domainData.roleToAssertion[r]
 		for _, assert := range policies {
 			if assert.resource.MatchString(check.Resource) && assert.action.MatchString(check.Action) && assert.effect == "ALLOW" {
-				fmt.Println("Authorization successful using cache data")
+				return true, nil
 			}
 		}
 	}
-	fmt.Println("Authorization failed")
-	c.lock.RUnlock()
+	privateCache.lock.RUnlock()
+	return false, nil
 }

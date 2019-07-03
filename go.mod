@@ -18,7 +18,7 @@ require (
 	gopkg.in/yaml.v2 v2.2.2 // indirect
 	k8s.io/api v0.0.0-20190222213804-5cb15d344471
 	k8s.io/apimachinery v0.0.0-20190629003722-e20a3a656cff
-	k8s.io/client-go v10.0.0+incompatible
+	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/klog v0.3.3 // indirect
 	k8s.io/utils v0.0.0-20190607212802-c55fbcfc754a // indirect
 	sigs.k8s.io/yaml v1.1.0 // indirect
