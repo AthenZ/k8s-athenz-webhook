@@ -156,8 +156,8 @@ func (c *Cache) updateObj(item *v1.AthenzDomain) {
 	if ok {
 		delete(c.DomainMap, domainName)
 	}
-	c.addObj(item)
 	c.lock.Unlock()
+	c.addObj(item)
 }
 
 func (c *Cache) deleteObj(item *v1.AthenzDomain) {
@@ -177,6 +177,7 @@ func authorize(principal string, check AthenzAccessCheck) (bool, error) {
 	}
 
 	privateCache.lock.RLock()
+	defer privateCache.lock.RUnlock()
 	crMap := privateCache.DomainMap
 	domainData := crMap[domainName[0]]
 	roles := []string{}
@@ -196,6 +197,5 @@ func authorize(principal string, check AthenzAccessCheck) (bool, error) {
 			}
 		}
 	}
-	privateCache.lock.RUnlock()
 	return false, nil
 }
