@@ -168,7 +168,7 @@ func (c *client) authorize(ctx context.Context, principal string, check AthenzAc
 		if err != nil {
 			fmt.Println("Error happened using cache to evaluate authorization decision", err)
 		}
-		fmt.Println("Authorization decision using cache: ", decision)
+		fmt.Println("Authorization decision using cache (true=authorized, false=not authorized): ", decision)
 	}
 
 	esc := url.PathEscape
