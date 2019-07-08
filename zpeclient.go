@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	v1 "github.com/yahoo/k8s-athenz-istio-auth/pkg/apis/athenz/v1"
 	"k8s.io/client-go/tools/cache"
@@ -16,13 +17,19 @@ var (
 	privateCache *Cache
 )
 
-// RoleMappings - cr cache
+// roleMappings - cr cache
 type roleMappings struct {
-	roleToPrincipals map[string][]*regexp.Regexp
+	roleToPrincipals map[string][]*simplePrincipal
 	roleToAssertion  map[string][]*simpleAssertion
 }
 
-// SimpleAssertion - processed policy
+// simplePrincipal - principal data
+type simplePrincipal struct {
+	memberRegex *regexp.Regexp
+	expiration  time.Time
+}
+
+// simpleAssertion - processed policy
 type simpleAssertion struct {
 	resource *regexp.Regexp
 	action   *regexp.Regexp
@@ -83,17 +90,25 @@ func parseData(domainMap map[string]roleMappings, domainName string, item *v1.At
 		}
 		_, ok := crMap.roleToPrincipals[string(role.Name)]
 		if !ok {
-			crMap.roleToPrincipals[string(role.Name)] = []*regexp.Regexp{}
+			crMap.roleToPrincipals[string(role.Name)] = []*simplePrincipal{}
 		}
 		for _, roleMember := range role.RoleMembers {
-			if roleMember == nil {
+			if roleMember == nil || roleMember.MemberName == "" {
 				continue
 			}
 			memberRegex, err := regexp.Compile("^" + replacer.Replace(strings.ToLower(string(roleMember.MemberName))) + "$")
 			if err != nil {
 				fmt.Printf("Error occurred when converting role memeber name into regex format. Error: %v", err)
 			}
-			crMap.roleToPrincipals[string(role.Name)] = append(crMap.roleToPrincipals[string(role.Name)], memberRegex)
+			principalData := &simplePrincipal{
+				memberRegex: memberRegex,
+			}
+			if roleMember.Expiration == nil {
+				principalData.expiration = time.Time{}
+			} else {
+				principalData.expiration = roleMember.Expiration.Time
+			}
+			crMap.roleToPrincipals[string(role.Name)] = append(crMap.roleToPrincipals[string(role.Name)], principalData)
 		}
 	}
 
@@ -137,7 +152,7 @@ func (c *Cache) addObj(item *v1.AthenzDomain) {
 	domainName := item.ObjectMeta.Name
 	_, ok := c.DomainMap[domainName]
 	if !ok {
-		roleToPrincipals := make(map[string][]*regexp.Regexp)
+		roleToPrincipals := make(map[string][]*simplePrincipal)
 		roleToAssertion := make(map[string][]*simpleAssertion)
 		crMap := roleMappings{
 			roleToPrincipals: roleToPrincipals,
@@ -185,9 +200,11 @@ func authorize(principal string, check AthenzAccessCheck) (bool, error) {
 	}
 	roles := []string{}
 	for role, members := range domainData.roleToPrincipals {
-		for _, memberRegex := range members {
-			if memberRegex.MatchString(principal) {
-				roles = append(roles, role)
+		for _, member := range members {
+			if member.memberRegex.MatchString(principal) {
+				if member.expiration.IsZero() || member.expiration.After(time.Now()) {
+					roles = append(roles, role)
+				}
 			}
 		}
 	}

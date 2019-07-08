@@ -1,8 +1,8 @@
 package webhook
 
 import (
-	"regexp"
 	"testing"
+	"time"
 
 	"github.com/ardielle/ardielle-go/rdl"
 	"github.com/yahoo/athenz/clients/go/zms"
@@ -34,7 +34,7 @@ func getFakeDomain() zms.SignedDomain {
 							Assertions: []*zms.Assertion{
 								{
 									Role:     domainName + ":role.admin",
-									Resource: domainName + ".test:*",
+									Resource: domainName + ":*",
 									Action:   "*",
 									Effect:   &allow,
 								},
@@ -77,7 +77,7 @@ func newCache() *Cache {
 func TestParseData(t *testing.T) {
 	c := newCache()
 	domainName := "home.domain"
-	roleToPrincipals := make(map[string][]*regexp.Regexp)
+	roleToPrincipals := make(map[string][]*simplePrincipal)
 	roleToAssertion := make(map[string][]*simpleAssertion)
 	crMap := roleMappings{
 		roleToPrincipals: roleToPrincipals,
@@ -150,6 +150,9 @@ func TestUpdateObj(t *testing.T) {
 			RoleMembers: []*zms.RoleMember{
 				{
 					MemberName: zms.MemberName(username),
+					Expiration: &rdl.Timestamp{
+						Time: time.Now().Add(time.Hour),
+					},
 				},
 			},
 		},
@@ -160,6 +163,9 @@ func TestUpdateObj(t *testing.T) {
 			RoleMembers: []*zms.RoleMember{
 				{
 					MemberName: zms.MemberName(username),
+					Expiration: &rdl.Timestamp{
+						Time: time.Now().Add(2 * time.Hour),
+					},
 				},
 			},
 		},
@@ -172,6 +178,14 @@ func TestUpdateObj(t *testing.T) {
 	if len(crMap.roleToPrincipals) != 2 {
 		t.Error(len(crMap.roleToPrincipals))
 		t.Error("Failed to update AthenzDomain roles")
+	}
+	_, ok = crMap.roleToPrincipals["home.domain:role.admin.test1"]
+	if !ok {
+		t.Error("Unable to get key home.domain:role.admin.test1")
+	}
+	_, ok = crMap.roleToPrincipals["home.domain:role.admin.test2"]
+	if !ok {
+		t.Error("Unable to get key home.domain:role.admin.test2")
 	}
 }
 
@@ -195,5 +209,61 @@ func TestDeleteObj(t *testing.T) {
 	_, ok = c.DomainMap[domainName]
 	if ok {
 		t.Error("Failed to delete AthenzDomain to domainMap")
+	}
+}
+
+func TestAuthorize(t *testing.T) {
+	privateCache = newCache()
+	domainName := "home.domain"
+	roleToPrincipals := make(map[string][]*simplePrincipal)
+	roleToAssertion := make(map[string][]*simpleAssertion)
+	crMap := roleMappings{
+		roleToPrincipals: roleToPrincipals,
+		roleToAssertion:  roleToAssertion,
+	}
+	privateCache.DomainMap[domainName] = crMap
+	spec := v1.AthenzDomainSpec{
+		SignedDomain: getFakeDomain(),
+	}
+	item := &v1.AthenzDomain{
+		Spec: spec,
+	}
+	parseData(privateCache.DomainMap, domainName, item)
+	check := AthenzAccessCheck{
+		Action:   "get",
+		Resource: "home.domain:pods",
+	}
+	res, err := authorize(username, check)
+	if err != nil {
+		t.Error(err)
+	}
+	if !res {
+		t.Error("Wrong authorization result, should pass.")
+	}
+
+	// Expired membership
+	timestamp, _ := rdl.TimestampParse("2019-06-21T19:28:09.305Z")
+	item.Spec.Domain.Roles = []*zms.Role{
+		{
+			Members:  []zms.MemberName{zms.MemberName(username)},
+			Modified: &timestamp,
+			Name:     zms.ResourceName(domainName + ":role.admin"),
+			RoleMembers: []*zms.RoleMember{
+				{
+					MemberName: zms.MemberName(username + "1"),
+					Expiration: &rdl.Timestamp{
+						Time: time.Now().Add(time.Duration(-10) * time.Hour),
+					},
+				},
+			},
+		},
+	}
+	privateCache.updateObj(item)
+	res, err = authorize(username+"1", check)
+	if err != nil {
+		t.Error(err)
+	}
+	if res {
+		t.Error("Wrong authorization result. Membership has expired")
 	}
 }
