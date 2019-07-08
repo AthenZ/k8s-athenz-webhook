@@ -94,10 +94,11 @@ func parseData(domainMap map[string]roleMappings, domainName string, item *v1.At
 		if !ok {
 			crMap.roleToPrincipals[string(role.Name)] = []*simplePrincipal{}
 		}
-		if role.RoleMembers == nil && string(role.Trust) == "" {
-			log.Error("No role members or trust domains are found")
+		if role.RoleMembers == nil {
+			log.Error("No role members are found")
 			continue
 		}
+		// Handle trust domains: if string(role.Trust) != ""
 		for _, roleMember := range role.RoleMembers {
 			if roleMember == nil || roleMember.MemberName == "" {
 				continue
