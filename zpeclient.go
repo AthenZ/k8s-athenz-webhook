@@ -179,18 +179,21 @@ func authorize(principal string, check AthenzAccessCheck) (bool, error) {
 	privateCache.lock.RLock()
 	defer privateCache.lock.RUnlock()
 	crMap := privateCache.DomainMap
-	domainData := crMap[domainName[0]]
+	domainData, ok := crMap[domainName[0]]
+	if !ok {
+		return false, fmt.Errorf("%s does not exist in cache map", domainName[0])
+	}
 	roles := []string{}
-	for roleName, member := range domainData.roleToPrincipals {
-		for _, memberRegex := range member {
+	for role, members := range domainData.roleToPrincipals {
+		for _, memberRegex := range members {
 			if memberRegex.MatchString(principal) {
-				roles = append(roles, roleName)
+				roles = append(roles, role)
 			}
 		}
 	}
 
-	for _, r := range roles {
-		policies := domainData.roleToAssertion[r]
+	for _, role := range roles {
+		policies := domainData.roleToAssertion[role]
 		for _, assert := range policies {
 			if assert.resource.MatchString(check.Resource) && assert.action.MatchString(check.Action) && assert.effect == "ALLOW" {
 				return true, nil
