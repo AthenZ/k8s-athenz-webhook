@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"git.ouroath.com/yahoo-cloud/k8s-athenz-syncer/pkg/log"
 	v1 "github.com/yahoo/k8s-athenz-istio-auth/pkg/apis/athenz/v1"
 	"k8s.io/client-go/tools/cache"
 )
@@ -87,7 +86,7 @@ func parseData(domainMap map[string]roleMappings, domainName string, item *v1.At
 	}
 	for _, role := range item.Spec.SignedDomain.Domain.Roles {
 		if role == nil {
-			log.Error("Role is nil")
+			fmt.Println("Role is nil")
 			continue
 		}
 		_, ok := crMap.roleToPrincipals[string(role.Name)]
@@ -95,7 +94,7 @@ func parseData(domainMap map[string]roleMappings, domainName string, item *v1.At
 			crMap.roleToPrincipals[string(role.Name)] = []*simplePrincipal{}
 		}
 		if role.RoleMembers == nil {
-			log.Error("No role members are found")
+			fmt.Println("No role members are found")
 			continue
 		}
 		// Handle trust domains: if string(role.Trust) != ""
