@@ -163,7 +163,15 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 		if err != nil {
 			return deny(NewAuthzError(err, internal), true)
 		}
-		granted, err = client.authorize(ctx, principal, check, a.AuthorizationConfig.Config)
+		var decision bool
+		if a.AuthorizationConfig.Config.UseCache {
+			decision, err = a.AuthorizationConfig.Config.Cache.authorize(principal, check)
+			if err != nil {
+				fmt.Println("Error happened using cache to evaluate authorization decision", err)
+			}
+			fmt.Println("Authorization decision using cache (true=authorized, false=not authorized): ", decision)
+		}
+		granted, err = client.authorize(ctx, principal, check)
 		if err != nil {
 			switch e := err.(type) {
 			case *statusCodeError:
@@ -175,6 +183,9 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 				}
 			}
 			return deny(NewAuthzError(err, ""), true)
+		}
+		if granted != decision {
+			fmt.Println("There is a mismatch between cache result and zms result. Send Alert!")
 		}
 		if granted {
 			via = check.String()

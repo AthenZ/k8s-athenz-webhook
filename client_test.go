@@ -252,15 +252,7 @@ func TestClientAuthorize(t *testing.T) {
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := newClient(server.URL, server.URL, 200*time.Millisecond, http.DefaultTransport)
-	c := AuthenticationConfig{
-		Config: Config{
-			AuthHeader: "X-Auth",
-			Timeout:    200 * time.Millisecond,
-			Cache:      &Cache{},
-			UseCache:   false,
-		},
-	}
-	granted, err := client.authorize(context.Background(), "me", AthenzAccessCheck{Resource: "d:service", Action: "read"}, c.Config)
+	granted, err := client.authorize(context.Background(), "me", AthenzAccessCheck{Resource: "d:service", Action: "read"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,15 +265,7 @@ func TestClientAuthorizeFail(t *testing.T) {
 	server := httptest.NewServer(nil)
 	server.Close()
 	client := newClient(server.URL, server.URL, 200*time.Millisecond, http.DefaultTransport)
-	c := AuthenticationConfig{
-		Config: Config{
-			AuthHeader: "X-Auth",
-			Timeout:    200 * time.Millisecond,
-			Cache:      &Cache{},
-			UseCache:   false,
-		},
-	}
-	granted, err := client.authorize(context.Background(), "me", AthenzAccessCheck{Resource: "d:service", Action: "read"}, c.Config)
+	granted, err := client.authorize(context.Background(), "me", AthenzAccessCheck{Resource: "d:service", Action: "read"})
 	if err == nil {
 		t.Fatal("expected error, got success")
 	}

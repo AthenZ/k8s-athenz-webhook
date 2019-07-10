@@ -158,17 +158,9 @@ func (c *client) authenticate() (*AthenzPrincipal, error) {
 
 // authorize returns true if the supplied principal has access to the resource and action. The initial check is done
 // against the zts endpoint. If that is unreachable, the check is retried against the zms endpoint.
-func (c *client) authorize(ctx context.Context, principal string, check AthenzAccessCheck, config Config) (bool, error) {
+func (c *client) authorize(ctx context.Context, principal string, check AthenzAccessCheck) (bool, error) {
 	var authzResponse struct {
 		Granted bool `json:"granted"`
-	}
-
-	if config.UseCache {
-		decision, err := authorize(principal, check)
-		if err != nil {
-			fmt.Println("Error happened using cache to evaluate authorization decision", err)
-		}
-		fmt.Println("Authorization decision using cache (true=authorized, false=not authorized): ", decision)
 	}
 
 	esc := url.PathEscape

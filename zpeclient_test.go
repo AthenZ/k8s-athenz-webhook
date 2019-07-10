@@ -70,7 +70,7 @@ func getFakeDomain() zms.SignedDomain {
 func newCache() *Cache {
 	domainMap := make(map[string]roleMappings)
 	return &Cache{
-		DomainMap: domainMap,
+		domainMap: domainMap,
 	}
 }
 
@@ -83,15 +83,15 @@ func TestParseData(t *testing.T) {
 		roleToPrincipals: roleToPrincipals,
 		roleToAssertion:  roleToAssertion,
 	}
-	c.DomainMap[domainName] = crMap
+	c.domainMap[domainName] = crMap
 	spec := v1.AthenzDomainSpec{
 		SignedDomain: getFakeDomain(),
 	}
 	item := &v1.AthenzDomain{
 		Spec: spec,
 	}
-	parseData(c.DomainMap, domainName, item)
-	crMap, ok := c.DomainMap[domainName]
+	parseData(c.domainMap, domainName, item)
+	crMap, ok := c.domainMap[domainName]
 	if !ok {
 		t.Error("Failed to add domain data to map")
 	}
@@ -115,8 +115,8 @@ func TestAddObj(t *testing.T) {
 		},
 		Spec: spec,
 	}
-	c.addObj(item)
-	obj, ok := c.DomainMap[domainName]
+	c.addupdateObj(item)
+	obj, ok := c.domainMap[domainName]
 	if !ok {
 		t.Error("Failed to add AthenzDomain to domainMap")
 	}
@@ -137,8 +137,8 @@ func TestUpdateObj(t *testing.T) {
 		},
 		Spec: spec,
 	}
-	c.addObj(item)
-	_, ok := c.DomainMap[domainName]
+	c.addupdateObj(item)
+	_, ok := c.domainMap[domainName]
 	if !ok {
 		t.Error("Failed to create AthenzDomain to domainMap")
 	}
@@ -170,8 +170,8 @@ func TestUpdateObj(t *testing.T) {
 			},
 		},
 	}
-	c.updateObj(item)
-	crMap, ok := c.DomainMap[domainName]
+	c.addupdateObj(item)
+	crMap, ok := c.domainMap[domainName]
 	if !ok {
 		t.Error("Failed to keep AthenzDomain to domainMap")
 	}
@@ -200,20 +200,20 @@ func TestDeleteObj(t *testing.T) {
 		},
 		Spec: spec,
 	}
-	c.addObj(item)
-	_, ok := c.DomainMap[domainName]
+	c.addupdateObj(item)
+	_, ok := c.domainMap[domainName]
 	if !ok {
 		t.Error("Failed to add AthenzDomain to domainMap")
 	}
 	c.deleteObj(item)
-	_, ok = c.DomainMap[domainName]
+	_, ok = c.domainMap[domainName]
 	if ok {
 		t.Error("Failed to delete AthenzDomain to domainMap")
 	}
 }
 
 func TestAuthorize(t *testing.T) {
-	privateCache = newCache()
+	privateCache := newCache()
 	domainName := "home.domain"
 	roleToPrincipals := make(map[string][]*simplePrincipal)
 	roleToAssertion := make(map[string][]*simpleAssertion)
@@ -221,19 +221,19 @@ func TestAuthorize(t *testing.T) {
 		roleToPrincipals: roleToPrincipals,
 		roleToAssertion:  roleToAssertion,
 	}
-	privateCache.DomainMap[domainName] = crMap
+	privateCache.domainMap[domainName] = crMap
 	spec := v1.AthenzDomainSpec{
 		SignedDomain: getFakeDomain(),
 	}
 	item := &v1.AthenzDomain{
 		Spec: spec,
 	}
-	parseData(privateCache.DomainMap, domainName, item)
+	parseData(privateCache.domainMap, domainName, item)
 	check := AthenzAccessCheck{
 		Action:   "get",
 		Resource: "home.domain:pods",
 	}
-	res, err := authorize(username, check)
+	res, err := privateCache.authorize(username, check)
 	if err != nil {
 		t.Error(err)
 	}
@@ -258,8 +258,8 @@ func TestAuthorize(t *testing.T) {
 			},
 		},
 	}
-	privateCache.updateObj(item)
-	res, err = authorize(username+"1", check)
+	privateCache.addupdateObj(item)
+	res, err = privateCache.authorize(username+"1", check)
 	if err != nil {
 		t.Error(err)
 	}
