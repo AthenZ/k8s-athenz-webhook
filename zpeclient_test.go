@@ -3,6 +3,7 @@ package webhook
 import (
 	"log"
 	"os"
+	"regexp"
 	"testing"
 	"time"
 
@@ -152,6 +153,7 @@ func TestParseDataNilCase(t *testing.T) {
 func TestParseDataPrincipal(t *testing.T) {
 	c := newCache()
 	item := getFakeAthenzDomains()
+
 	// role has nil field or empty object
 	item.Spec.SignedDomain.Domain.Roles = []*zms.Role{
 		{},
@@ -164,6 +166,7 @@ func TestParseDataPrincipal(t *testing.T) {
 	if len(c.domainMap[domainName].roleToPrincipals) != 0 {
 		t.Error("roleToPrincipal map should be empty since roles are empty or nil")
 	}
+
 	// roleMember is nil or roleMember name is nil
 	item.Spec.SignedDomain.Domain.Roles = []*zms.Role{
 		{
@@ -191,6 +194,7 @@ func TestParseDataPrincipal(t *testing.T) {
 	if len(c.domainMap[domainName].roleToPrincipals["home.domain:role.admin"]) != 0 {
 		t.Error("roleToPrincipal array should be empty since role members are empty")
 	}
+
 	// regex conversion fail
 	item.Spec.SignedDomain.Domain.Roles = []*zms.Role{
 		{
@@ -215,6 +219,7 @@ func TestParseDataPrincipal(t *testing.T) {
 func TestParseDataPolicy(t *testing.T) {
 	c := newCache()
 	item := getFakeAthenzDomains()
+
 	// policy is nil
 	item.Spec.SignedDomain.Domain.Policies.Contents.Policies = []*zms.Policy{
 		{},
@@ -250,6 +255,8 @@ func TestParseDataPolicy(t *testing.T) {
 func TestAddOrUpdateObj(t *testing.T) {
 	c := newCache()
 	item := getFakeAthenzDomains()
+
+	// add athenz domain
 	c.addOrUpdateObj(item)
 	obj, ok := c.domainMap[domainName]
 	if !ok {
@@ -258,6 +265,15 @@ func TestAddOrUpdateObj(t *testing.T) {
 	if len(obj.roleToPrincipals["home.domain:role.admin"]) != 1 {
 		t.Error("Failed to add AthenzDomain to domainMap. RoleToPrincipals is empty.")
 	}
+	targetRegex, err := regexp.Compile("^user.name$")
+	if err != nil {
+		t.Error(err)
+	}
+	actualRegex := obj.roleToPrincipals["home.domain:role.admin"][0].memberRegex
+	if actualRegex.String() != targetRegex.String() {
+		t.Error("member added to the map does not match target regex")
+	}
+
 	// update athenz domains
 	item.Spec.Domain.Roles = []*zms.Role{
 		{
@@ -291,16 +307,13 @@ func TestAddOrUpdateObj(t *testing.T) {
 		t.Error("Failed to keep AthenzDomain to domainMap")
 	}
 	if len(crMap.roleToPrincipals) != 2 {
-		t.Error(len(crMap.roleToPrincipals))
 		t.Error("Failed to update AthenzDomain roles")
 	}
-	_, ok = crMap.roleToPrincipals["home.domain:role.admin.test1"]
-	if !ok {
-		t.Error("Unable to get key home.domain:role.admin.test1")
+	if crMap.roleToPrincipals["home.domain:role.admin.test1"][0].memberRegex.String() != targetRegex.String() {
+		t.Error("Unable to find correct member for role home.domain:role.admin.test1")
 	}
-	_, ok = crMap.roleToPrincipals["home.domain:role.admin.test2"]
-	if !ok {
-		t.Error("Unable to get key home.domain:role.admin.test2")
+	if crMap.roleToPrincipals["home.domain:role.admin.test2"][0].memberRegex.String() != targetRegex.String() {
+		t.Error("Unable to find correct member for role home.domain:role.admin.test2")
 	}
 }
 
@@ -310,7 +323,7 @@ func TestDeleteObj(t *testing.T) {
 	c.deleteObj(item)
 	_, ok := c.domainMap[domainName]
 	if ok {
-		t.Error("Failed to delete AthenzDomain to domainMap")
+		t.Error("Failed to delete AthenzDomain in domainMap")
 	}
 }
 
@@ -355,7 +368,7 @@ func TestAuthorize(t *testing.T) {
 		t.Error("should throw an error when domain does not exist in map")
 	}
 
-	// Expired membership
+	// expired membership
 	check = AthenzAccessCheck{
 		Action:   "get",
 		Resource: "home.domain:pods",
