@@ -122,6 +122,7 @@ type grantStatus struct {
 }
 
 func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReviewSpec) *grantStatus {
+	log := getLogger(ctx)
 	deny := func(err error, addHelpText bool) *grantStatus {
 		var reason string
 		if e, ok := err.(*AuthzError); ok {
@@ -167,9 +168,9 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 		if a.AuthorizationConfig.Config.UseCache {
 			decision, err = a.AuthorizationConfig.Config.Cache.authorize(principal, check)
 			if err != nil {
-				fmt.Println("Error happened using cache to evaluate authorization decision", err)
+				log.Println("Error happened using cache to evaluate authorization decision", err)
 			}
-			fmt.Println("Authorization decision using cache (true=authorized, false=not authorized): ", decision)
+			log.Println("Authorization decision using cache (true=authorized, false=not authorized): ", decision)
 		}
 		granted, err = client.authorize(ctx, principal, check)
 		if err != nil {
@@ -185,7 +186,7 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 			return deny(NewAuthzError(err, ""), true)
 		}
 		if granted != decision {
-			fmt.Println("There is a mismatch between cache result and zms result. Send Alert!")
+			log.Println("There is a mismatch between cache result and zms result. Send Alert!")
 		}
 		if granted {
 			via = check.String()

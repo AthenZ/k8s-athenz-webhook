@@ -1,6 +1,8 @@
 package webhook
 
 import (
+	"log"
+	"os"
 	"testing"
 	"time"
 
@@ -14,6 +16,19 @@ const (
 	domainName = "home.domain"
 	username   = "user.name"
 )
+
+func getFakeAthenzDomains() *v1.AthenzDomain {
+	spec := v1.AthenzDomainSpec{
+		SignedDomain: getFakeDomain(),
+	}
+	item := &v1.AthenzDomain{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: domainName,
+		},
+		Spec: spec,
+	}
+	return item
+}
 
 func getFakeDomain() zms.SignedDomain {
 	allow := zms.ALLOW
@@ -58,6 +73,10 @@ func getFakeDomain() zms.SignedDomain {
 						},
 					},
 				},
+				{
+					Name:  zms.ResourceName(domainName + ":role.delegated"),
+					Trust: "test.delegated.domain",
+				},
 			},
 			Services: []*zms.ServiceIdentity{},
 			Entities: []*zms.Entity{},
@@ -69,14 +88,10 @@ func getFakeDomain() zms.SignedDomain {
 
 func newCache() *Cache {
 	domainMap := make(map[string]roleMappings)
-	return &Cache{
+	c := &Cache{
 		domainMap: domainMap,
+		log:       log.New(os.Stderr, "", log.LstdFlags),
 	}
-}
-
-func TestParseData(t *testing.T) {
-	c := newCache()
-	domainName := "home.domain"
 	roleToPrincipals := make(map[string][]*simplePrincipal)
 	roleToAssertion := make(map[string][]*simpleAssertion)
 	crMap := roleMappings{
@@ -84,18 +99,21 @@ func TestParseData(t *testing.T) {
 		roleToAssertion:  roleToAssertion,
 	}
 	c.domainMap[domainName] = crMap
-	spec := v1.AthenzDomainSpec{
-		SignedDomain: getFakeDomain(),
+	return c
+}
+
+func TestParseData(t *testing.T) {
+	c := newCache()
+	item := getFakeAthenzDomains()
+	err := parseData(c.domainMap, domainName, item, c.log)
+	if err != nil {
+		t.Error(err)
 	}
-	item := &v1.AthenzDomain{
-		Spec: spec,
-	}
-	parseData(c.domainMap, domainName, item)
 	crMap, ok := c.domainMap[domainName]
 	if !ok {
 		t.Error("Failed to add domain data to map")
 	}
-	if len(crMap.roleToPrincipals) != 1 || crMap.roleToPrincipals["home.domain:role.admin"] == nil {
+	if len(crMap.roleToPrincipals) != 2 || crMap.roleToPrincipals["home.domain:role.admin"] == nil {
 		t.Error("Failed to create RoleToPrincipals map")
 	}
 
@@ -104,18 +122,135 @@ func TestParseData(t *testing.T) {
 	}
 }
 
-func TestAddObj(t *testing.T) {
+func TestParseDataNilCase(t *testing.T) {
 	c := newCache()
-	spec := v1.AthenzDomainSpec{
-		SignedDomain: getFakeDomain(),
+	item := getFakeAthenzDomains()
+	item.Spec.SignedDomain.Domain.Policies.Contents = nil
+	err := parseData(c.domainMap, domainName, item, c.log)
+	if err.Error() != "One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil" {
+		t.Error("did not catch policies content nil")
 	}
-	item := &v1.AthenzDomain{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: domainName,
+
+	item.Spec.SignedDomain.Domain.Policies = nil
+	err = parseData(c.domainMap, domainName, item, c.log)
+	if err.Error() != "One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil" {
+		t.Error("did not catch policies nil")
+	}
+
+	item.Spec.SignedDomain.Domain = nil
+	err = parseData(c.domainMap, domainName, item, c.log)
+	if err.Error() != "One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil" {
+		t.Error("did not catch Domain data nil")
+	}
+
+	err = parseData(c.domainMap, domainName, nil, c.log)
+	if err.Error() != "One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil" {
+		t.Error("did not catch item nil")
+	}
+}
+
+func TestParseDataPrincipal(t *testing.T) {
+	c := newCache()
+	item := getFakeAthenzDomains()
+	// role has nil field or empty object
+	item.Spec.SignedDomain.Domain.Roles = []*zms.Role{
+		{},
+		nil,
+	}
+	err := parseData(c.domainMap, domainName, item, c.log)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(c.domainMap[domainName].roleToPrincipals) != 0 {
+		t.Error("roleToPrincipal map should be empty since roles are empty or nil")
+	}
+	// roleMember is nil or roleMember name is nil
+	item.Spec.SignedDomain.Domain.Roles = []*zms.Role{
+		{
+			Members: []zms.MemberName{zms.MemberName(username)},
+			Name:    zms.ResourceName(domainName + ":role.admin"),
+			RoleMembers: []*zms.RoleMember{
+				{
+					MemberName: zms.MemberName(""),
+				},
+			},
 		},
-		Spec: spec,
+		{
+			Members: []zms.MemberName{zms.MemberName(username)},
+			Name:    zms.ResourceName(domainName + ":role.admin"),
+			RoleMembers: []*zms.RoleMember{
+				{},
+				nil,
+			},
+		},
 	}
-	c.addupdateObj(item)
+	err = parseData(c.domainMap, domainName, item, c.log)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(c.domainMap[domainName].roleToPrincipals["home.domain:role.admin"]) != 0 {
+		t.Error("roleToPrincipal array should be empty since role members are empty")
+	}
+	// regex conversion fail
+	item.Spec.SignedDomain.Domain.Roles = []*zms.Role{
+		{
+			Members: []zms.MemberName{zms.MemberName(username)},
+			Name:    zms.ResourceName(domainName + ":role.admin"),
+			RoleMembers: []*zms.RoleMember{
+				{
+					MemberName: zms.MemberName("/?([a-zA-Z0-9_+-\\s+]+)"),
+				},
+			},
+		},
+	}
+	err = parseData(c.domainMap, domainName, item, c.log)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(c.domainMap[domainName].roleToPrincipals["home.domain:role.admin"]) != 0 {
+		t.Error("member shouldn't be added to the map because member name regex is invalid")
+	}
+}
+
+func TestParseDataPolicy(t *testing.T) {
+	c := newCache()
+	item := getFakeAthenzDomains()
+	// policy is nil
+	item.Spec.SignedDomain.Domain.Policies.Contents.Policies = []*zms.Policy{
+		{},
+		nil,
+	}
+	err := parseData(c.domainMap, domainName, item, c.log)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(c.domainMap[domainName].roleToAssertion) != 0 {
+		t.Error("map entries shouldn't be added because policies are nil or empty")
+	}
+
+	// assertion is nil
+	item.Spec.SignedDomain.Domain.Policies.Contents.Policies = []*zms.Policy{
+		{
+			Assertions: []*zms.Assertion{
+				{},
+				nil,
+			},
+			Name: zms.ResourceName(domainName + ":policy.admin"),
+		},
+	}
+	err = parseData(c.domainMap, domainName, item, c.log)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(c.domainMap[domainName].roleToAssertion) != 0 {
+		t.Error("map entries shouldn't be added because assertions are nil or empty")
+	}
+}
+
+func TestAddOrUpdateObj(t *testing.T) {
+	c := newCache()
+	item := getFakeAthenzDomains()
+	c.addOrUpdateObj(item)
 	obj, ok := c.domainMap[domainName]
 	if !ok {
 		t.Error("Failed to add AthenzDomain to domainMap")
@@ -123,30 +258,11 @@ func TestAddObj(t *testing.T) {
 	if len(obj.roleToPrincipals["home.domain:role.admin"]) != 1 {
 		t.Error("Failed to add AthenzDomain to domainMap. RoleToPrincipals is empty.")
 	}
-}
-
-func TestUpdateObj(t *testing.T) {
-	timestamp, _ := rdl.TimestampParse("2019-06-21T19:28:09.305Z")
-	c := newCache()
-	spec := v1.AthenzDomainSpec{
-		SignedDomain: getFakeDomain(),
-	}
-	item := &v1.AthenzDomain{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: domainName,
-		},
-		Spec: spec,
-	}
-	c.addupdateObj(item)
-	_, ok := c.domainMap[domainName]
-	if !ok {
-		t.Error("Failed to create AthenzDomain to domainMap")
-	}
+	// update athenz domains
 	item.Spec.Domain.Roles = []*zms.Role{
 		{
-			Members:  []zms.MemberName{zms.MemberName(username)},
-			Modified: &timestamp,
-			Name:     zms.ResourceName(domainName + ":role.admin.test1"),
+			Members: []zms.MemberName{zms.MemberName(username)},
+			Name:    zms.ResourceName(domainName + ":role.admin.test1"),
 			RoleMembers: []*zms.RoleMember{
 				{
 					MemberName: zms.MemberName(username),
@@ -157,9 +273,8 @@ func TestUpdateObj(t *testing.T) {
 			},
 		},
 		{
-			Members:  []zms.MemberName{zms.MemberName(username + "1")},
-			Modified: &timestamp,
-			Name:     zms.ResourceName(domainName + ":role.admin.test2"),
+			Members: []zms.MemberName{zms.MemberName(username + "1")},
+			Name:    zms.ResourceName(domainName + ":role.admin.test2"),
 			RoleMembers: []*zms.RoleMember{
 				{
 					MemberName: zms.MemberName(username),
@@ -170,7 +285,7 @@ func TestUpdateObj(t *testing.T) {
 			},
 		},
 	}
-	c.addupdateObj(item)
+	c.addOrUpdateObj(item)
 	crMap, ok := c.domainMap[domainName]
 	if !ok {
 		t.Error("Failed to keep AthenzDomain to domainMap")
@@ -191,22 +306,9 @@ func TestUpdateObj(t *testing.T) {
 
 func TestDeleteObj(t *testing.T) {
 	c := newCache()
-	spec := v1.AthenzDomainSpec{
-		SignedDomain: getFakeDomain(),
-	}
-	item := &v1.AthenzDomain{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: domainName,
-		},
-		Spec: spec,
-	}
-	c.addupdateObj(item)
-	_, ok := c.domainMap[domainName]
-	if !ok {
-		t.Error("Failed to add AthenzDomain to domainMap")
-	}
+	item := getFakeAthenzDomains()
 	c.deleteObj(item)
-	_, ok = c.domainMap[domainName]
+	_, ok := c.domainMap[domainName]
 	if ok {
 		t.Error("Failed to delete AthenzDomain to domainMap")
 	}
@@ -214,21 +316,13 @@ func TestDeleteObj(t *testing.T) {
 
 func TestAuthorize(t *testing.T) {
 	privateCache := newCache()
-	domainName := "home.domain"
-	roleToPrincipals := make(map[string][]*simplePrincipal)
-	roleToAssertion := make(map[string][]*simpleAssertion)
-	crMap := roleMappings{
-		roleToPrincipals: roleToPrincipals,
-		roleToAssertion:  roleToAssertion,
+	item := getFakeAthenzDomains()
+	err := parseData(privateCache.domainMap, domainName, item, privateCache.log)
+	if err != nil {
+		t.Error(err)
 	}
-	privateCache.domainMap[domainName] = crMap
-	spec := v1.AthenzDomainSpec{
-		SignedDomain: getFakeDomain(),
-	}
-	item := &v1.AthenzDomain{
-		Spec: spec,
-	}
-	parseData(privateCache.domainMap, domainName, item)
+
+	// grant access
 	check := AthenzAccessCheck{
 		Action:   "get",
 		Resource: "home.domain:pods",
@@ -238,16 +332,38 @@ func TestAuthorize(t *testing.T) {
 		t.Error(err)
 	}
 	if !res {
-		t.Error("Wrong authorization result, should pass.")
+		t.Error("Wrong authorization result, authorization should pass.")
+	}
+
+	// deny access
+	check = AthenzAccessCheck{
+		Action:   "get",
+		Resource: "home.domain:pods",
+	}
+	res, err = privateCache.authorize("fakeclient", check)
+	if res {
+		t.Error("Wrong authorization result, fakeclient's request should be denied")
+	}
+
+	// check resource does not exist in cache
+	check = AthenzAccessCheck{
+		Action:   "get",
+		Resource: "home.domain.test:pods",
+	}
+	res, err = privateCache.authorize(username, check)
+	if err.Error() != "home.domain.test does not exist in cache map" {
+		t.Error("should throw an error when domain does not exist in map")
 	}
 
 	// Expired membership
-	timestamp, _ := rdl.TimestampParse("2019-06-21T19:28:09.305Z")
+	check = AthenzAccessCheck{
+		Action:   "get",
+		Resource: "home.domain:pods",
+	}
 	item.Spec.Domain.Roles = []*zms.Role{
 		{
-			Members:  []zms.MemberName{zms.MemberName(username)},
-			Modified: &timestamp,
-			Name:     zms.ResourceName(domainName + ":role.admin"),
+			Members: []zms.MemberName{zms.MemberName(username)},
+			Name:    zms.ResourceName(domainName + ":role.admin"),
 			RoleMembers: []*zms.RoleMember{
 				{
 					MemberName: zms.MemberName(username + "1"),
@@ -258,7 +374,7 @@ func TestAuthorize(t *testing.T) {
 			},
 		},
 	}
-	privateCache.addupdateObj(item)
+	privateCache.addOrUpdateObj(item)
 	res, err = privateCache.authorize(username+"1", check)
 	if err != nil {
 		t.Error(err)
