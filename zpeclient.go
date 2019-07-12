@@ -83,22 +83,18 @@ func NewZpeClient(crIndexInformer cache.SharedIndexInformer, log Logger) *Cache 
 
 // parseData - helper function to parse AthenzDomain data and store it in domainMap
 // Important: This function is not thread safe, need to be called with locks around!
-func parseData(domainMap map[string]roleMappings, domainName string, item *v1.AthenzDomain, log Logger) error {
-	crMap := domainMap[domainName]
+func parseData(crMap roleMappings, item *v1.AthenzDomain, log Logger) (roleMappings, error) {
 	if item == nil || item.Spec.SignedDomain.Domain == nil || item.Spec.SignedDomain.Domain.Policies == nil || item.Spec.SignedDomain.Domain.Policies.Contents == nil {
-		return errors.New("One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil")
+		return crMap, errors.New("One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil")
 	}
 	for _, role := range item.Spec.SignedDomain.Domain.Roles {
 		if role == nil || role.Name == "" {
-			log.Printf("Role is nil in %s roles", domainName)
+			log.Printf("Role is nil in %s roles", item.Spec.SignedDomain.Domain.Name)
 			continue
 		}
-		_, ok := crMap.roleToPrincipals[string(role.Name)]
-		if !ok {
-			crMap.roleToPrincipals[string(role.Name)] = []*simplePrincipal{}
-		}
+		roleName := string(role.Name)
 		if role.RoleMembers == nil {
-			log.Printf("No role members are found in %s", string(role.Name))
+			log.Printf("No role members are found in %s", roleName)
 			continue
 		}
 		// Handle trust domains: if string(role.Trust) != ""
@@ -120,23 +116,23 @@ func parseData(domainMap map[string]roleMappings, domainName string, item *v1.At
 			} else {
 				principalData.expiration = roleMember.Expiration.Time
 			}
-			crMap.roleToPrincipals[string(role.Name)] = append(crMap.roleToPrincipals[string(role.Name)], principalData)
+			_, ok := crMap.roleToPrincipals[roleName]
+			if !ok {
+				crMap.roleToPrincipals[roleName] = []*simplePrincipal{}
+			}
+			crMap.roleToPrincipals[roleName] = append(crMap.roleToPrincipals[roleName], principalData)
 		}
 	}
 
 	for _, policy := range item.Spec.SignedDomain.Domain.Policies.Contents.Policies {
-		if policy == nil || policy.Name == "" {
+		if policy == nil || len(policy.Assertions) == 0 {
 			log.Println("policy in Contents.Policies is nil")
 			continue
 		}
 		for _, assertion := range policy.Assertions {
-			if assertion == nil || assertion.Role == "" || assertion.Resource == "" || assertion.Action == "" {
+			if assertion == nil || assertion.Role == "" || assertion.Resource == "" || assertion.Action == "" || assertion.Effect == nil {
 				log.Println("assertion in policy.Assertions is nil")
 				continue
-			}
-			_, ok := crMap.roleToAssertion[assertion.Role]
-			if !ok {
-				crMap.roleToAssertion[assertion.Role] = []*simpleAssertion{}
 			}
 			effect := assertion.Effect
 			resourceRegex, err := regexp.Compile("^" + replacer.Replace(strings.ToLower(assertion.Resource)) + "$")
@@ -154,31 +150,31 @@ func parseData(domainMap map[string]roleMappings, domainName string, item *v1.At
 				action:   actionRegex,
 				effect:   effect,
 			}
+			_, ok := crMap.roleToAssertion[assertion.Role]
+			if !ok {
+				crMap.roleToAssertion[assertion.Role] = []*simpleAssertion{}
+			}
 			crMap.roleToAssertion[assertion.Role] = append(crMap.roleToAssertion[assertion.Role], &simpleAssert)
 		}
 	}
-	return nil
+	return crMap, nil
 }
 
 // addupdateObj - add and update cr object in cache
 func (c *Cache) addOrUpdateObj(item *v1.AthenzDomain) {
-	c.lock.Lock()
-	domainName := item.ObjectMeta.Name
-	_, ok := c.domainMap[domainName]
-	if ok {
-		delete(c.domainMap, domainName)
-	}
+	c.deleteObj(item)
 	roleToPrincipals := make(map[string][]*simplePrincipal)
 	roleToAssertion := make(map[string][]*simpleAssertion)
 	crMap := roleMappings{
 		roleToPrincipals: roleToPrincipals,
 		roleToAssertion:  roleToAssertion,
 	}
-	c.domainMap[domainName] = crMap
-	err := parseData(c.domainMap, domainName, item, c.log)
+	crmap, err := parseData(crMap, item, c.log)
 	if err != nil {
 		c.log.Printf("Error happened parsing AthenzDomains CR info. Error: %v", err)
 	}
+	c.lock.Lock()
+	c.domainMap[domainName] = crmap
 	c.lock.Unlock()
 }
 
@@ -196,7 +192,7 @@ func (c *Cache) deleteObj(item *v1.AthenzDomain) {
 // authorize - authorize using cache data
 func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, error) {
 	domainName := strings.Split(check.Resource, ":")
-	if len(domainName) != 2 {
+	if len(domainName) < 2 {
 		return false, errors.New("Error splitting domain name")
 	}
 
@@ -217,6 +213,7 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 			}
 		}
 	}
+	c.log.Printf("%d roles matched principal: %s on domain: %s", len(roles), principal, domainName[0])
 
 	for _, role := range roles {
 		policies := domainData.roleToAssertion[role]

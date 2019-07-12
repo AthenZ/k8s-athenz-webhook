@@ -106,15 +106,11 @@ func newCache() *Cache {
 func TestParseData(t *testing.T) {
 	c := newCache()
 	item := getFakeAthenzDomains()
-	err := parseData(c.domainMap, domainName, item, c.log)
+	crMap, err := parseData(c.domainMap[domainName], item, c.log)
 	if err != nil {
 		t.Error(err)
 	}
-	crMap, ok := c.domainMap[domainName]
-	if !ok {
-		t.Error("Failed to add domain data to map")
-	}
-	if len(crMap.roleToPrincipals) != 2 || crMap.roleToPrincipals["home.domain:role.admin"] == nil {
+	if len(crMap.roleToPrincipals) != 1 || crMap.roleToPrincipals["home.domain:role.admin"] == nil {
 		t.Error("Failed to create RoleToPrincipals map")
 	}
 
@@ -127,24 +123,24 @@ func TestParseDataNilCase(t *testing.T) {
 	c := newCache()
 	item := getFakeAthenzDomains()
 	item.Spec.SignedDomain.Domain.Policies.Contents = nil
-	err := parseData(c.domainMap, domainName, item, c.log)
+	_, err := parseData(c.domainMap[domainName], item, c.log)
 	if err.Error() != "One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil" {
 		t.Error("did not catch policies content nil")
 	}
 
 	item.Spec.SignedDomain.Domain.Policies = nil
-	err = parseData(c.domainMap, domainName, item, c.log)
+	_, err = parseData(c.domainMap[domainName], item, c.log)
 	if err.Error() != "One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil" {
 		t.Error("did not catch policies nil")
 	}
 
 	item.Spec.SignedDomain.Domain = nil
-	err = parseData(c.domainMap, domainName, item, c.log)
+	_, err = parseData(c.domainMap[domainName], item, c.log)
 	if err.Error() != "One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil" {
 		t.Error("did not catch Domain data nil")
 	}
 
-	err = parseData(c.domainMap, domainName, nil, c.log)
+	_, err = parseData(c.domainMap[domainName], nil, c.log)
 	if err.Error() != "One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil" {
 		t.Error("did not catch item nil")
 	}
@@ -159,11 +155,11 @@ func TestParseDataPrincipal(t *testing.T) {
 		{},
 		nil,
 	}
-	err := parseData(c.domainMap, domainName, item, c.log)
+	crmap, err := parseData(c.domainMap[domainName], item, c.log)
 	if err != nil {
 		t.Error(err)
 	}
-	if len(c.domainMap[domainName].roleToPrincipals) != 0 {
+	if len(crmap.roleToPrincipals) != 0 {
 		t.Error("roleToPrincipal map should be empty since roles are empty or nil")
 	}
 
@@ -187,11 +183,11 @@ func TestParseDataPrincipal(t *testing.T) {
 			},
 		},
 	}
-	err = parseData(c.domainMap, domainName, item, c.log)
+	crmap, err = parseData(c.domainMap[domainName], item, c.log)
 	if err != nil {
 		t.Error(err)
 	}
-	if len(c.domainMap[domainName].roleToPrincipals["home.domain:role.admin"]) != 0 {
+	if len(crmap.roleToPrincipals["home.domain:role.admin"]) != 0 {
 		t.Error("roleToPrincipal array should be empty since role members are empty")
 	}
 
@@ -207,11 +203,11 @@ func TestParseDataPrincipal(t *testing.T) {
 			},
 		},
 	}
-	err = parseData(c.domainMap, domainName, item, c.log)
+	crmap, err = parseData(c.domainMap[domainName], item, c.log)
 	if err != nil {
 		t.Error(err)
 	}
-	if len(c.domainMap[domainName].roleToPrincipals["home.domain:role.admin"]) != 0 {
+	if len(crmap.roleToPrincipals["home.domain:role.admin"]) != 0 {
 		t.Error("member shouldn't be added to the map because member name regex is invalid")
 	}
 }
@@ -225,11 +221,11 @@ func TestParseDataPolicy(t *testing.T) {
 		{},
 		nil,
 	}
-	err := parseData(c.domainMap, domainName, item, c.log)
+	crmap, err := parseData(c.domainMap[domainName], item, c.log)
 	if err != nil {
 		t.Error(err)
 	}
-	if len(c.domainMap[domainName].roleToAssertion) != 0 {
+	if len(crmap.roleToAssertion) != 0 {
 		t.Error("map entries shouldn't be added because policies are nil or empty")
 	}
 
@@ -243,11 +239,11 @@ func TestParseDataPolicy(t *testing.T) {
 			Name: zms.ResourceName(domainName + ":policy.admin"),
 		},
 	}
-	err = parseData(c.domainMap, domainName, item, c.log)
+	crmap, err = parseData(c.domainMap[domainName], item, c.log)
 	if err != nil {
 		t.Error(err)
 	}
-	if len(c.domainMap[domainName].roleToAssertion) != 0 {
+	if len(crmap.roleToAssertion) != 0 {
 		t.Error("map entries shouldn't be added because assertions are nil or empty")
 	}
 }
@@ -330,7 +326,7 @@ func TestDeleteObj(t *testing.T) {
 func TestAuthorize(t *testing.T) {
 	privateCache := newCache()
 	item := getFakeAthenzDomains()
-	err := parseData(privateCache.domainMap, domainName, item, privateCache.log)
+	_, err := parseData(privateCache.domainMap[domainName], item, privateCache.log)
 	if err != nil {
 		t.Error(err)
 	}
