@@ -83,29 +83,35 @@ func NewZpeClient(crIndexInformer cache.SharedIndexInformer, log Logger) *Cache 
 
 // parseData - helper function to parse AthenzDomain data and store it in domainMap
 // Important: This function is not thread safe, need to be called with locks around!
-func parseData(crMap roleMappings, item *v1.AthenzDomain, log Logger) (roleMappings, error) {
+func (c *Cache) parseData(item *v1.AthenzDomain) (roleMappings, error) {
+	roleToPrincipals := make(map[string][]*simplePrincipal)
+	roleToAssertion := make(map[string][]*simpleAssertion)
+	crMap := roleMappings{
+		roleToPrincipals: roleToPrincipals,
+		roleToAssertion:  roleToAssertion,
+	}
 	if item == nil || item.Spec.SignedDomain.Domain == nil || item.Spec.SignedDomain.Domain.Policies == nil || item.Spec.SignedDomain.Domain.Policies.Contents == nil {
 		return crMap, errors.New("One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil")
 	}
 	for _, role := range item.Spec.SignedDomain.Domain.Roles {
 		if role == nil || role.Name == "" {
-			log.Printf("Role is nil in %s roles", item.Spec.SignedDomain.Domain.Name)
+			c.log.Printf("Role is nil in %s roles", item.Spec.SignedDomain.Domain.Name)
 			continue
 		}
 		roleName := string(role.Name)
 		if role.RoleMembers == nil {
-			log.Printf("No role members are found in %s", roleName)
+			c.log.Printf("No role members are found in %s", roleName)
 			continue
 		}
 		// Handle trust domains: if string(role.Trust) != ""
 		for _, roleMember := range role.RoleMembers {
 			if roleMember == nil || roleMember.MemberName == "" {
-				log.Println("roleMember is nil or MemberName in roleMember is nil")
+				c.log.Println("roleMember is nil or MemberName in roleMember is nil")
 				continue
 			}
 			memberRegex, err := regexp.Compile("^" + replacer.Replace(strings.ToLower(string(roleMember.MemberName))) + "$")
 			if err != nil {
-				log.Printf("Error occurred when converting role memeber name into regex format. Error: %v", err)
+				c.log.Printf("Error occurred when converting role memeber name into regex format. Error: %v", err)
 				continue
 			}
 			principalData := &simplePrincipal{
@@ -126,23 +132,23 @@ func parseData(crMap roleMappings, item *v1.AthenzDomain, log Logger) (roleMappi
 
 	for _, policy := range item.Spec.SignedDomain.Domain.Policies.Contents.Policies {
 		if policy == nil || len(policy.Assertions) == 0 {
-			log.Println("policy in Contents.Policies is nil")
+			c.log.Println("policy in Contents.Policies is nil")
 			continue
 		}
 		for _, assertion := range policy.Assertions {
 			if assertion == nil || assertion.Role == "" || assertion.Resource == "" || assertion.Action == "" || assertion.Effect == nil {
-				log.Println("assertion in policy.Assertions is nil")
+				c.log.Println("assertion in policy.Assertions is nil")
 				continue
 			}
 			effect := assertion.Effect
 			resourceRegex, err := regexp.Compile("^" + replacer.Replace(strings.ToLower(assertion.Resource)) + "$")
 			if err != nil {
-				log.Printf("Error occurred when converting assertion resource into regex format. Error: %v", err)
+				c.log.Printf("Error occurred when converting assertion resource into regex format. Error: %v", err)
 				continue
 			}
 			actionRegex, err := regexp.Compile("^" + replacer.Replace(strings.ToLower(assertion.Action)) + "$")
 			if err != nil {
-				log.Printf("Error occurred when converting assertion action into regex format. Error: %v", err)
+				c.log.Printf("Error occurred when converting assertion action into regex format. Error: %v", err)
 				continue
 			}
 			simpleAssert := simpleAssertion{
@@ -162,20 +168,13 @@ func parseData(crMap roleMappings, item *v1.AthenzDomain, log Logger) (roleMappi
 
 // addupdateObj - add and update cr object in cache
 func (c *Cache) addOrUpdateObj(item *v1.AthenzDomain) {
-	c.deleteObj(item)
-	roleToPrincipals := make(map[string][]*simplePrincipal)
-	roleToAssertion := make(map[string][]*simpleAssertion)
-	crMap := roleMappings{
-		roleToPrincipals: roleToPrincipals,
-		roleToAssertion:  roleToAssertion,
-	}
-	crmap, err := parseData(crMap, item, c.log)
+	crMap, err := c.parseData(item)
 	if err != nil {
 		c.log.Printf("Error happened parsing AthenzDomains CR info. Error: %v", err)
 	}
 	domainName := item.ObjectMeta.Name
 	c.lock.Lock()
-	c.domainMap[domainName] = crmap
+	c.domainMap[domainName] = crMap
 	c.lock.Unlock()
 }
 

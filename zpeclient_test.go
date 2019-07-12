@@ -106,7 +106,7 @@ func newCache() *Cache {
 func TestParseData(t *testing.T) {
 	c := newCache()
 	item := getFakeAthenzDomains()
-	crMap, err := parseData(c.domainMap[domainName], item, c.log)
+	crMap, err := c.parseData(item)
 	if err != nil {
 		t.Error(err)
 	}
@@ -123,24 +123,24 @@ func TestParseDataNilCase(t *testing.T) {
 	c := newCache()
 	item := getFakeAthenzDomains()
 	item.Spec.SignedDomain.Domain.Policies.Contents = nil
-	_, err := parseData(c.domainMap[domainName], item, c.log)
+	_, err := c.parseData(item)
 	if err.Error() != "One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil" {
 		t.Error("did not catch policies content nil")
 	}
 
 	item.Spec.SignedDomain.Domain.Policies = nil
-	_, err = parseData(c.domainMap[domainName], item, c.log)
+	_, err = c.parseData(item)
 	if err.Error() != "One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil" {
 		t.Error("did not catch policies nil")
 	}
 
 	item.Spec.SignedDomain.Domain = nil
-	_, err = parseData(c.domainMap[domainName], item, c.log)
+	_, err = c.parseData(item)
 	if err.Error() != "One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil" {
 		t.Error("did not catch Domain data nil")
 	}
 
-	_, err = parseData(c.domainMap[domainName], nil, c.log)
+	_, err = c.parseData(nil)
 	if err.Error() != "One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil" {
 		t.Error("did not catch item nil")
 	}
@@ -155,7 +155,7 @@ func TestParseDataPrincipal(t *testing.T) {
 		{},
 		nil,
 	}
-	crmap, err := parseData(c.domainMap[domainName], item, c.log)
+	crmap, err := c.parseData(item)
 	if err != nil {
 		t.Error(err)
 	}
@@ -183,7 +183,7 @@ func TestParseDataPrincipal(t *testing.T) {
 			},
 		},
 	}
-	crmap, err = parseData(c.domainMap[domainName], item, c.log)
+	crmap, err = c.parseData(item)
 	if err != nil {
 		t.Error(err)
 	}
@@ -203,7 +203,7 @@ func TestParseDataPrincipal(t *testing.T) {
 			},
 		},
 	}
-	crmap, err = parseData(c.domainMap[domainName], item, c.log)
+	crmap, err = c.parseData(item)
 	if err != nil {
 		t.Error(err)
 	}
@@ -221,7 +221,7 @@ func TestParseDataPolicy(t *testing.T) {
 		{},
 		nil,
 	}
-	crmap, err := parseData(c.domainMap[domainName], item, c.log)
+	crmap, err := c.parseData(item)
 	if err != nil {
 		t.Error(err)
 	}
@@ -239,7 +239,7 @@ func TestParseDataPolicy(t *testing.T) {
 			Name: zms.ResourceName(domainName + ":policy.admin"),
 		},
 	}
-	crmap, err = parseData(c.domainMap[domainName], item, c.log)
+	crmap, err = c.parseData(item)
 	if err != nil {
 		t.Error(err)
 	}
@@ -326,10 +326,11 @@ func TestDeleteObj(t *testing.T) {
 func TestAuthorize(t *testing.T) {
 	privateCache := newCache()
 	item := getFakeAthenzDomains()
-	_, err := parseData(privateCache.domainMap[domainName], item, privateCache.log)
+	crMap, err := privateCache.parseData(item)
 	if err != nil {
 		t.Error(err)
 	}
+	privateCache.domainMap[domainName] = crMap
 
 	// grant access
 	check := AthenzAccessCheck{
