@@ -162,6 +162,7 @@ func (c *client) authorize(ctx context.Context, principal string, check AthenzAc
 	var authzResponse struct {
 		Granted bool `json:"granted"`
 	}
+
 	esc := url.PathEscape
 	u := fmt.Sprintf("%s/access/%s/%s?principal=%s", c.ztsEndpoint, esc(check.Action), esc(check.Resource), esc(principal))
 	err := c.request(u, &authzResponse, nil)

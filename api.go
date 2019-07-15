@@ -103,6 +103,8 @@ type Config struct {
 	LogProvider LogProvider                // the log provider
 	LogFlags    LogFlags                   // logging flags
 	Validator   zmssvctoken.TokenValidator // token validator
+	Cache       *Cache
+	UseCache    bool
 }
 
 func (c *Config) initDefaults() {
