@@ -171,6 +171,7 @@ func (c *Cache) addOrUpdateObj(item *v1.AthenzDomain) {
 	crMap, err := c.parseData(item)
 	if err != nil {
 		c.log.Printf("Error happened parsing AthenzDomains CR info. Error: %v", err)
+		return
 	}
 	domainName := item.ObjectMeta.Name
 	c.lock.Lock()
