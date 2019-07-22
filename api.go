@@ -103,8 +103,9 @@ type Config struct {
 	LogProvider LogProvider                // the log provider
 	LogFlags    LogFlags                   // logging flags
 	Validator   zmssvctoken.TokenValidator // token validator
-	Cache       *Cache
-	UseCache    bool
+	Cache       *Cache                     // AthenzDomain Cache
+	UseCache    bool                       // UseCache flag
+	DryRun      bool                       // DryRun mode flag
 }
 
 func (c *Config) initDefaults() {
