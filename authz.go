@@ -130,13 +130,14 @@ func (a *authorizer) useCacheEval(log Logger, principal string, checks []AthenzA
 		decision, err = a.AuthorizationConfig.Config.Cache.authorize(principal, check)
 		if err != nil {
 			log.Println("Error happened using cache to evaluate authorization decision", err)
+			continue
 		}
-		log.Println("Authorization decision using cache (true=authorized, false=not authorized): ", decision)
 		if decision {
 			via = check.String()
 			break
 		}
 	}
+	log.Println("Authorization decision using cache (true=authorized, false=not authorized): ", decision)
 	if decision {
 		return &grantStatus{
 			status: authz.SubjectAccessReviewStatus{
