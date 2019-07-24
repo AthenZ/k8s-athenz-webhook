@@ -121,6 +121,7 @@ type grantStatus struct {
 	via    string                          // the resource check that succeeded for a grant, not set for deny
 }
 
+// useCacheEval - authorize using cache
 func (a *authorizer) useCacheEval(log Logger, principal string, checks []AthenzAccessCheck) *grantStatus {
 	var via string
 	var decision bool
