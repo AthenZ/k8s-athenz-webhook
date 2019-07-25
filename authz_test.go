@@ -468,3 +468,27 @@ func TestAuthzBadInputs(t *testing.T) {
 		}
 	}
 }
+
+func TestUseCacheEval(t *testing.T) {
+	c := newCache()
+	item := getFakeAthenzDomains()
+	crMap, err := c.parseData(item)
+	if err != nil {
+		t.Error(err)
+	}
+	c.domainMap["home.domain"] = crMap
+	s := newAuthzScaffold(t)
+	s.config.Cache = c
+	az := newAuthz(s.config)
+	log := s.config.LogProvider("test")
+	checks := []AthenzAccessCheck{
+		{
+			Resource: "home.domain:pods",
+			Action:   "get",
+		},
+	}
+	res := az.useCacheEval(log, "user.name", checks)
+	if res == nil {
+		t.Error("Should return grantStatus true")
+	}
+}
