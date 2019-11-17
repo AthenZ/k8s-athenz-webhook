@@ -119,9 +119,8 @@ domain.
 5. Check if the user is allowed the action through the Athenz policy. 
 
 #### Garm implementation
-
-Please see the readme example in the [garm](example/garm) directory to see 
-implementation specific details.
+Please see the readme for the garm repo [here](https://github.com/yahoojapan/garm)
+to see implementation specific details.
 
 ## Contribute
 
