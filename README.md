@@ -1,6 +1,6 @@
 # k8s-athenz-webhook [![GoDoc](https://godoc.org/github.com/yahoo/k8s-athenz-webhook?status.svg)](https://godoc.org/github.com/yahoo/k8s-athenz-webhook) [![Build Status](https://travis-ci.org/yahoo/k8s-athenz-webhook.svg?branch=master)](https://travis-ci.org/yahoo/k8s-athenz-webhook) [![Coverage Status](https://coveralls.io/repos/github/yahoo/k8s-athenz-webhook/badge.svg?branch=master)](https://coveralls.io/github/yahoo/k8s-athenz-webhook?branch=master) [![Go Report Card](https://goreportcard.com/badge/github.com/yahoo/k8s-athenz-webhook)](https://goreportcard.com/report/github.com/yahoo/k8s-athenz-webhook)
 
-API for a Kubernetes authentication and authorization webhook that integrates with
+An API for a Kubernetes authentication and authorization webhook that integrates with
 [Athenz](https://github.com/yahoo/athenz) for access checks. It allows flexible
 resource mapping from Kubernetes resources to Athenz.
 
@@ -10,7 +10,7 @@ Kubernetes.
 ![Screenshot](docs/images/architecture.png)
 
 The following steps occur during any access check:
-1. The user, pipeline, or service authenticates with the Kubernetes api server
+1. The user, pipeline, or service authenticates with the Kubernetes API server
 through the use of X.509 certificates or through a ntoken.
 2. The authorization check goes to the auth webhook to validate if the user,
 service, or pipeline has access.
@@ -29,10 +29,10 @@ using ntokens.
 
 #### Ntoken (deprecated)
 To use ntokens for clients in the kube config, the auth webhook must be configured
-as an authentication endpoint for the Kubernetes api server. The auth webhook
+as an authentication endpoint for the Kubernetes API server. The auth webhook
 contains a public key cache which has the public keys of Athenz hosts which are
 used to validate the ntoken signatures. If there is a cache miss, the webhook will
-call Athenz on the principal api endpoint.
+call Athenz on the principal API endpoint.
 
 #### X.509 (recommended)
 The recommended approach for authentication is to attach the Athenz CA to the 
@@ -58,7 +58,7 @@ case Athenz servers go down.
 
 **Note**: This feature is currently in alpha mode and is being tested in a dry
 run mode. Some edge cases may not be fully covered yet while it's being developed
-to be on parity with the access Athenz api.
+to be on parity with the access Athenz API.
 
 ## Prerequisites
 There are a variety of prerequisites required in order to run this controller, they
@@ -75,7 +75,7 @@ caching feature. The repo can be found [here](https://github.com/yahoo/k8s-athen
 ## Usage
 
 ### Configuring the auth webhook with the Kubernetes API server
-To configure the Kubernetes api server to use a custom auth webhook server, follow
+To configure the Kubernetes API server to use a custom auth webhook server, follow
 the steps defined on their official documentation which can be found
 [here](https://kubernetes.io/docs/reference/access-authn-authz/webhook/).
 
