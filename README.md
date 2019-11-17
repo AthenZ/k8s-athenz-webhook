@@ -47,7 +47,7 @@ role and policies in the domain to verify if the action is allowed. The default
 behavior is for the auth webhook to call the Athenz ZTS server on the access
 API endpoint and fallback to ZMS if the ZTS calls fail.
 
-#### Caching feature
+#### Caching feature (Alpha)
 The auth webhook supports a caching features for authorization which utilizes the
 Athenz domain custom resource which are created by the [k8s-athenz-syncer](https://github.com/yahoo/k8s-athenz-syncer).
 If this feature is turned on, the webhook will check if the requested action for
@@ -55,6 +55,10 @@ the identity is authorized to access the resource by checking against an in memo
 cache of Athenz domains. This is a huge performance improvement as network calls
 to ZTS / ZMS are avoided and it also allows the webhook to continue running in the
 case Athenz servers go down.
+
+**Note**: This feature is currently in alpha mode and is being tested in a dry
+run mode. Some edge cases may not be fully covered yet while it's being developed
+to be on parity with the access Athenz api.
 
 ## Prerequisites
 There are a variety of prerequisites required in order to run this controller, they
