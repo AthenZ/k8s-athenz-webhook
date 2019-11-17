@@ -2,58 +2,57 @@
 
 API for a Kubernetes authentication and authorization webhook that integrates with
 [Athenz](https://github.com/yahoo/athenz) for access checks. It allows flexible
-resource mapping from K8s resources to Athenz.
+resource mapping from Kubernetes resources to Athenz.
 
 ## Architecture
-The athenz webhook is meant to be used as an authentication and authorization
-webhook for the Kubernetes api server. The diagram below shows the end to end
-flow of how the webhook integrates into Kubernetes.
+The diagram below shows the end to end flow of how the webhook integrates into
+Kubernetes.
 ![Screenshot](docs/images/architecture.png)
 
 The following steps occur during any access check:
 1. The user, pipeline, or service authenticates with the Kubernetes api server
-through the use of X509 certificates or through a ntoken.
+through the use of X.509 certificates or through a ntoken.
 2. The authorization check goes to the auth webhook to validate if the user,
 service, or pipeline has access.
 3. If the caching feature (described further down) is turned on, the webhook
-will validate the access check against the athenz domain data it has stored
+will validate the access check against the Athenz domain data it has stored
 in memory.
 4. If the caching feature return false or if it's not turned on, the check will
-call athenz.
+call Athenz.
 
-Note: You can also use just the authorization hook without also using the
-authentication hook.
+Note: You can use just the authorization hook without also using the authentication
+hook.
 
 ### Authentication
-There are two ways to authenticate with athenz, using X.509 certificates or
+There are two ways to authenticate with Athenz, using X.509 certificates or
 using ntokens.
 
 #### Ntoken (deprecated)
 To use ntokens for clients in the kube config, the auth webhook must be configured
 as an authentication endpoint for the Kubernetes api server. The auth webhook
-contains a public key cache which has the public keys of athenz hosts which are
+contains a public key cache which has the public keys of Athenz hosts which are
 used to validate the ntoken signatures. If there is a cache miss, the webhook will
-call athenz on the principal api endpoint.
+call Athenz on the principal api endpoint.
 
 #### X.509 (recommended)
-The recommended approach for authentication is to attach the athenz CA to the 
-Kubernetes API CA. This will mean clients will specify athenz certificates for
-their connection in the kube config.
+The recommended approach for authentication is to attach the Athenz CA to the 
+Kubernetes API CA. This will mean clients will specify Athenz certificates for
+their connection in the kube config and be authenticated through a common CA.
 
 ### Authorization
-Authorization is done by calling athenz to check if the client has access to the
+Authorization is done by calling Athenz to check if the client has access to the
 requested action. Athenz internally will check the client identity against the
 role and policies in the domain to verify if the action is allowed. The default
-behavior is for the auth webhook to call the athenz ZTS server for the access
-check and fallback to ZMS if the ZTS calls fail.
+behavior is for the auth webhook to call the Athenz ZTS server on the access
+API endpoint and fallback to ZMS if the ZTS calls fail.
 
 #### Caching feature
 The auth webhook supports a caching features for authorization which utilizes the
-athenz domain custom resource which are created by the k8s-athenz-syncer. If this
+Athenz domain custom resource which are created by the k8s-athenz-syncer. If this
 feature is turned on, the webhook will check if the requested action for the identity
 is authorized to access the resource by checking against an in memory cache of
-athenz domains. This is a huge performance improvement as network calls to ZTS / ZMS
-are avoided and it also allows the webhook to continue running in the case athenz
+Athenz domains. This is a huge performance improvement as network calls to ZTS / ZMS
+are avoided and it also allows the webhook to continue running in the case Athenz
 servers go down.
 
 ## Prerequisites
@@ -61,20 +60,14 @@ There are a variety of prerequisites required in order to run this controller, t
 are specified below.
 - **Kubernetes cluster** - A running Kubernetes cluster is required with access to
 the control plane. More information on how to setup a cluster can be found in the
-official documentation
-[here](https://kubernetes.io/docs/setup/). This controller was developed and tested
-with the 1.13 release.
+official documentation [here](https://kubernetes.io/docs/setup/).
 - **Athenz** - Athenz ZTS and ZMS servers must be fully deployed. More information
 and setup steps can be found [here](http://www.athenz.io/).
-- **Athenz syncer** - The Athenz syncer must be fully deployed and syncing Athenz
-domain data into custom resources for this webhook to watch. The repo can be found
-[here](https://github.com/yahoo/k8s-athenz-syncer).
+- **Athenz syncer (optional)** - The Athenz syncer must be fully deployed and syncing
+Athenz domain data into custom resources for this webhook to watch if using the 
+caching feature. The repo can be found [here](https://github.com/yahoo/k8s-athenz-syncer).
 
 ## Usage
-
-### How to run
-The auth webhook can be ran in a variety of ways such as running as a systemd
-unit directly on the master api host or running as a pod within the cluster.
 
 ### Hooking into the API Server
 To configure the Kubernetes api server to use a custom auth webhook server, follow
@@ -103,7 +96,7 @@ type ResourceMapper interface {
 ```
 
 This allows the client to implement authorization checks which are specific to 
-their Athenz to Kubernetes mapping.
+their own Athenz to Kubernetes mapping inside of their cluster.
 
 ### Examples
 
