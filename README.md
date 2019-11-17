@@ -37,7 +37,8 @@ call Athenz on the principal api endpoint.
 #### X.509 (recommended)
 The recommended approach for authentication is to attach the Athenz CA to the 
 Kubernetes API CA. This will mean clients will specify Athenz certificates for
-their connection in the kube config and be authenticated through a common CA.
+their connection in the kube config and be authenticated through the use of a
+common CA.
 
 ### Authorization
 Authorization is done by calling Athenz to check if the client has access to the
@@ -48,12 +49,12 @@ API endpoint and fallback to ZMS if the ZTS calls fail.
 
 #### Caching feature
 The auth webhook supports a caching features for authorization which utilizes the
-Athenz domain custom resource which are created by the k8s-athenz-syncer. If this
-feature is turned on, the webhook will check if the requested action for the identity
-is authorized to access the resource by checking against an in memory cache of
-Athenz domains. This is a huge performance improvement as network calls to ZTS / ZMS
-are avoided and it also allows the webhook to continue running in the case Athenz
-servers go down.
+Athenz domain custom resource which are created by the [k8s-athenz-syncer](https://github.com/yahoo/k8s-athenz-syncer).
+If this feature is turned on, the webhook will check if the requested action for
+the identity is authorized to access the resource by checking against an in memory
+cache of Athenz domains. This is a huge performance improvement as network calls
+to ZTS / ZMS are avoided and it also allows the webhook to continue running in the
+case Athenz servers go down.
 
 ## Prerequisites
 There are a variety of prerequisites required in order to run this controller, they
@@ -69,7 +70,7 @@ caching feature. The repo can be found [here](https://github.com/yahoo/k8s-athen
 
 ## Usage
 
-### Hooking into the API Server
+### Configuring the auth webhook with the Kubernetes API server
 To configure the Kubernetes api server to use a custom auth webhook server, follow
 the steps defined on their official documentation which can be found
 [here](https://kubernetes.io/docs/reference/access-authn-authz/webhook/).
