@@ -23,6 +23,25 @@ const (
 	trustusername   = "trustuser.name"
 )
 
+var (
+	ad = &v1.AthenzDomain{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "home.domain",
+		},
+		Spec: v1.AthenzDomainSpec{
+			SignedDomain: getFakeDomain(),
+		},
+	}
+	ad1 = &v1.AthenzDomain{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test.delegated.domain",
+		},
+		Spec: v1.AthenzDomainSpec{
+			SignedDomain: getFakeTrustDomain(),
+		},
+	}
+)
+
 func getFakeAthenzDomains() *v1.AthenzDomain {
 	spec := v1.AthenzDomainSpec{
 		SignedDomain: getFakeDomain(),
@@ -167,24 +186,6 @@ func getFakeTrustDomain() zms.SignedDomain {
 		KeyId:     "colo-env-1.1",
 		Signature: "signature",
 	}
-}
-
-var ad = &v1.AthenzDomain{
-	ObjectMeta: metav1.ObjectMeta{
-		Name: "home.domain",
-	},
-	Spec: v1.AthenzDomainSpec{
-		getFakeDomain(),
-	},
-}
-
-var ad1 = &v1.AthenzDomain{
-	ObjectMeta: metav1.ObjectMeta{
-		Name: "test.delegated.domain",
-	},
-	Spec: v1.AthenzDomainSpec{
-		getFakeTrustDomain(),
-	},
 }
 
 func newCache() *Cache {
