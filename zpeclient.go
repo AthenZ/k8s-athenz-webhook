@@ -190,7 +190,7 @@ func (c *Cache) processTrustDomain(trust zms.DomainName, item *v1.AthenzDomain, 
 		storage := c.crIndexInformer.GetStore()
 		crContent, exists, _ := storage.GetByKey(trustDomain)
 		if !exists {
-			c.log.Println("error when finding trustDomain in the cache: Domain cr is not found in the cache store.")
+			c.log.Println("error when finding trustDomain " + trustDomain + " for this role name " + roleName + " in the cache: Domain cr is not found in the cache store.")
 			return res
 		}
 		// cast it to AthenzDomain object
