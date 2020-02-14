@@ -42,7 +42,7 @@ var (
 	}
 )
 
-func getFakeAthenzDomains() *v1.AthenzDomain {
+func getFakeAthenzDomain() *v1.AthenzDomain {
 	spec := v1.AthenzDomainSpec{
 		SignedDomain: getFakeDomain(),
 	}
@@ -203,6 +203,8 @@ func newCache() *Cache {
 		roleToPrincipals: roleToPrincipals,
 		roleToAssertion:  roleToAssertion,
 	}
+	c.crIndexInformer.GetStore().Add(ad.DeepCopy())
+	c.crIndexInformer.GetStore().Add(ad1.DeepCopy())
 	c.domainMap[domainName] = crMap
 	c.domainMap[trustDomainName] = crMap
 	return c
@@ -210,15 +212,13 @@ func newCache() *Cache {
 
 func TestParseData(t *testing.T) {
 	c := newCache()
-	c.crIndexInformer.GetStore().Add(ad.DeepCopy())
-	c.crIndexInformer.GetStore().Add(ad1.DeepCopy())
 	// load fake trust domain object
 	item := getFakeTrustAthenzDomains()
 	crMap, err := c.parseData(item)
 	if err != nil {
 		t.Error(err)
 	}
-	item = getFakeAthenzDomains()
+	item = getFakeAthenzDomain()
 	crMap, err = c.parseData(item)
 	if err != nil {
 		t.Error(err)
@@ -235,7 +235,7 @@ func TestParseData(t *testing.T) {
 
 func TestParseDataNilCase(t *testing.T) {
 	c := newCache()
-	item := getFakeAthenzDomains()
+	item := getFakeAthenzDomain()
 	item.Spec.SignedDomain.Domain.Policies.Contents = nil
 	_, err := c.parseData(item)
 	if err.Error() != "One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil" {
@@ -262,7 +262,7 @@ func TestParseDataNilCase(t *testing.T) {
 
 func TestParseDataPrincipal(t *testing.T) {
 	c := newCache()
-	item := getFakeAthenzDomains()
+	item := getFakeAthenzDomain()
 
 	// role has nil field or empty object
 	item.Spec.SignedDomain.Domain.Roles = []*zms.Role{
@@ -328,7 +328,7 @@ func TestParseDataPrincipal(t *testing.T) {
 
 func TestParseDataPolicy(t *testing.T) {
 	c := newCache()
-	item := getFakeAthenzDomains()
+	item := getFakeAthenzDomain()
 
 	// policy is nil
 	item.Spec.SignedDomain.Domain.Policies.Contents.Policies = []*zms.Policy{
@@ -364,7 +364,7 @@ func TestParseDataPolicy(t *testing.T) {
 
 func TestAddOrUpdateObj(t *testing.T) {
 	c := newCache()
-	item := getFakeAthenzDomains()
+	item := getFakeAthenzDomain()
 
 	// add athenz domain
 	c.addOrUpdateObj(item)
@@ -429,7 +429,7 @@ func TestAddOrUpdateObj(t *testing.T) {
 
 func TestDeleteObj(t *testing.T) {
 	c := newCache()
-	item := getFakeAthenzDomains()
+	item := getFakeAthenzDomain()
 	c.deleteObj(item)
 	_, ok := c.domainMap[domainName]
 	if ok {
@@ -439,9 +439,7 @@ func TestDeleteObj(t *testing.T) {
 
 func TestAuthorize(t *testing.T) {
 	privateCache := newCache()
-	privateCache.crIndexInformer.GetStore().Add(ad.DeepCopy())
-	privateCache.crIndexInformer.GetStore().Add(ad1.DeepCopy())
-	item := getFakeAthenzDomains()
+	item := getFakeAthenzDomain()
 	crMap, err := privateCache.parseData(item)
 	if err != nil {
 		t.Error(err)

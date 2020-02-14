@@ -4,7 +4,6 @@ go 1.12
 
 require (
 	github.com/ardielle/ardielle-go v1.5.2
-	github.com/davecgh/go-spew v1.1.1
 	github.com/stretchr/testify v1.3.0
 	github.com/yahoo/athenz v1.8.24
 	github.com/yahoo/k8s-athenz-syncer v0.1.1

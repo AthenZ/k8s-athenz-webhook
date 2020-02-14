@@ -104,9 +104,14 @@ func (c *Cache) parseData(item *v1.AthenzDomain) (roleMappings, error) {
 		roleName := string(role.Name)
 		// Handle trust domains: if string(role.Trust) != ""
 		// For a trusted domain, role object will only contain following items:
-		// modified, name, trust
+		// modified, name, trust.
+		// Note: logic may change depend on how signature validation is implemented.
 		if role.Trust != "" {
-			role.RoleMembers = c.processTrustDomain(role.Trust, item, roleName)
+			var err error
+			role.RoleMembers, err = c.processTrustDomain(role.Trust, item, roleName)
+			if err != nil {
+				c.log.Printf("Error occurred when processing trust domain. Error: %v", err)
+			}
 		}
 
 		if role.RoleMembers == nil {
@@ -178,62 +183,60 @@ func (c *Cache) parseData(item *v1.AthenzDomain) (roleMappings, error) {
 }
 
 // processTrustDomain -  in delegated domain check assume_role action in policy that contains current role as a resource, return role's member list
-func (c *Cache) processTrustDomain(trust zms.DomainName, item *v1.AthenzDomain, roleName string) []*zms.RoleMember {
+func (c *Cache) processTrustDomain(trust zms.DomainName, item *v1.AthenzDomain, roleName string) ([]*zms.RoleMember, error) {
 	var res []*zms.RoleMember
 	// handle case which crIndexInformer is not initialized at the beginning, return directly.
 	if c.crIndexInformer == nil {
-		return res
+		return res, nil
 	}
-	if trust != "" {
-		trustDomain := string(trust)
-		// initialize a clientset to get information of this trust athenz domain
-		storage := c.crIndexInformer.GetStore()
-		crContent, exists, _ := storage.GetByKey(trustDomain)
-		if !exists {
-			c.log.Println("error when finding trustDomain " + trustDomain + " for this role name " + roleName + " in the cache: Domain cr is not found in the cache store.")
-			return res
-		}
-		// cast it to AthenzDomain object
-		obj, ok := crContent.(*v1.AthenzDomain)
-		if !ok {
-			c.log.Println("Error occurred when casting trust domain interface to athen domain object")
-		}
+	trustDomain := string(trust)
+	// initialize a clientset to get information of this trust athenz domain
+	storage := c.crIndexInformer.GetStore()
+	crContent, exists, _ := storage.GetByKey(trustDomain)
+	if !exists {
+		return res, fmt.Errorf("Error when finding trustDomain %s for this role name %s in the cache: Domain cr is not found in the cache store", trustDomain, roleName)
+	}
+	// cast it to AthenzDomain object
+	obj, ok := crContent.(*v1.AthenzDomain)
+	if !ok {
+		return res, fmt.Errorf("Error occurred when casting trust domain interface to athen domain object")
+	}
 
-		for _, policy := range obj.Spec.SignedDomain.Domain.Policies.Contents.Policies {
-			if policy == nil || len(policy.Assertions) == 0 {
-				c.log.Println("policy in Contents.Policies is nil")
-				continue
-			}
-			for _, assertion := range policy.Assertions {
-				// check if policy contains action "assume_role", and resource matches with delegated role name
-				if assertion.Action == "assume_role" {
-					// form correct role name
-					matched, err := regexp.MatchString("^"+roleReplacer.Replace(assertion.Resource)+"$", roleName)
-					if err != nil {
-						c.log.Println("string matching failed with err: ", err)
-					}
-					if matched {
-						delegatedRole := assertion.Role
-						// check if above policy's corresponding role is delegated role or not
-						for _, role := range obj.Spec.SignedDomain.Domain.Roles {
-							if string(role.Name) == delegatedRole {
-								if role.Trust != "" {
-									// return empty array since athenz zms library does not recursively check delegated domain
-									// it only checks one level above. Refer to: https://github.com/yahoo/athenz/blob/master/servers/zms/src/main/java/com/yahoo/athenz/zms/DBService.java#L1972
-									return res
-								}
-								for _, member := range role.RoleMembers {
-									res = append(res, member)
-								}
-								return res
+	for _, policy := range obj.Spec.SignedDomain.Domain.Policies.Contents.Policies {
+		if policy == nil || len(policy.Assertions) == 0 {
+			c.log.Println("policy in Contents.Policies is nil")
+			continue
+		}
+		for _, assertion := range policy.Assertions {
+			// check if policy contains action "assume_role", and resource matches with delegated role name
+			if assertion.Action == "assume_role" {
+				// form correct role name
+				matched, err := regexp.MatchString("^"+roleReplacer.Replace(assertion.Resource)+"$", roleName)
+				if err != nil {
+					c.log.Println("string matching failed with err: ", err)
+					continue
+				}
+				if matched {
+					delegatedRole := assertion.Role
+					// check if above policy's corresponding role is delegated role or not
+					for _, role := range obj.Spec.SignedDomain.Domain.Roles {
+						if string(role.Name) == delegatedRole {
+							if role.Trust != "" {
+								// return empty array since athenz zms library does not recursively check delegated domain
+								// it only checks one level above. Refer to: https://github.com/yahoo/athenz/blob/master/servers/zms/src/main/java/com/yahoo/athenz/zms/DBService.java#L1972
+								return res, nil
 							}
+							for _, member := range role.RoleMembers {
+								res = append(res, member)
+							}
+							return res, nil
 						}
 					}
 				}
 			}
 		}
 	}
-	return res
+	return res, nil
 }
 
 // addupdateObj - add and update cr object in cache

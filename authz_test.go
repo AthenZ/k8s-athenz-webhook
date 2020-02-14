@@ -471,7 +471,7 @@ func TestAuthzBadInputs(t *testing.T) {
 
 func TestUseCacheEval(t *testing.T) {
 	c := newCache()
-	item := getFakeAthenzDomains()
+	item := getFakeAthenzDomain()
 	crMap, err := c.parseData(item)
 	if err != nil {
 		t.Error(err)
