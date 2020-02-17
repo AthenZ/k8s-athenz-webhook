@@ -19,14 +19,14 @@ import (
 const (
 	domainName      = "home.domain"
 	username        = "user.name"
-	trustDomainName = "test.delegated.domain"
+	trustDomainName = "test.trust.domain"
 	trustusername   = "trustuser.name"
 )
 
 var (
 	ad = &v1.AthenzDomain{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "home.domain",
+			Name: domainName,
 		},
 		Spec: v1.AthenzDomainSpec{
 			SignedDomain: getFakeDomain(),
@@ -34,7 +34,7 @@ var (
 	}
 	ad1 = &v1.AthenzDomain{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "test.delegated.domain",
+			Name: trustDomainName,
 		},
 		Spec: v1.AthenzDomainSpec{
 			SignedDomain: getFakeTrustDomain(),
@@ -86,13 +86,25 @@ func getFakeDomain() zms.SignedDomain {
 							Assertions: []*zms.Assertion{
 								{
 									Role:     domainName + ":role.delegated",
+									Resource: domainName + ":services",
+									Action:   "create",
+									Effect:   &allow,
+								},
+							},
+							Modified: &timestamp,
+							Name:     zms.ResourceName(domainName + ":policy.delegated"),
+						},
+						{
+							Assertions: []*zms.Assertion{
+								{
+									Role:     domainName + ":role.invaliduser",
 									Resource: domainName + ":*",
 									Action:   "*",
 									Effect:   &allow,
 								},
 							},
 							Modified: &timestamp,
-							Name:     zms.ResourceName(domainName + ":policy.delegated"),
+							Name:     zms.ResourceName(domainName + ":policy.invaliduser"),
 						},
 					},
 				},
@@ -114,6 +126,10 @@ func getFakeDomain() zms.SignedDomain {
 					Name:  zms.ResourceName(domainName + ":role.delegated"),
 					Trust: trustDomainName,
 				},
+				{
+					Name:  zms.ResourceName(domainName + ":role.invaliduser"),
+					Trust: trustDomainName,
+				},
 			},
 			Services: []*zms.ServiceIdentity{},
 			Entities: []*zms.Entity{},
@@ -123,7 +139,7 @@ func getFakeDomain() zms.SignedDomain {
 	}
 }
 
-func getFakeTrustAthenzDomains() *v1.AthenzDomain {
+func getFakeTrustAthenzDomain() *v1.AthenzDomain {
 	spec := v1.AthenzDomainSpec{
 		SignedDomain: getFakeTrustDomain(),
 	}
@@ -213,10 +229,14 @@ func newCache() *Cache {
 func TestParseData(t *testing.T) {
 	c := newCache()
 	// load fake trust domain object
-	item := getFakeTrustAthenzDomains()
+	item := getFakeTrustAthenzDomain()
 	crMap, err := c.parseData(item)
 	if err != nil {
 		t.Error(err)
+	}
+	// if the map creation fails, report error
+	if len(crMap.roleToPrincipals) != 1 || crMap.roleToPrincipals[trustDomainName+":role.admin"] == nil {
+		t.Error("Failed to create RoleToPrincipals map")
 	}
 	item = getFakeAthenzDomain()
 	crMap, err = c.parseData(item)
@@ -228,7 +248,7 @@ func TestParseData(t *testing.T) {
 		t.Error("Failed to create RoleToPrincipals map")
 	}
 
-	if len(crMap.roleToAssertion) != 2 || crMap.roleToPrincipals["home.domain:role.admin"] == nil || crMap.roleToPrincipals["home.domain:role.delegated"] == nil {
+	if len(crMap.roleToAssertion) != 3 || crMap.roleToPrincipals["home.domain:role.admin"] == nil || crMap.roleToPrincipals["home.domain:role.delegated"] == nil {
 		t.Error("Failed to create RoleToAssertion map")
 	}
 }
@@ -445,7 +465,7 @@ func TestAuthorize(t *testing.T) {
 		t.Error(err)
 	}
 	privateCache.domainMap[domainName] = crMap
-	item = getFakeTrustAthenzDomains()
+	item = getFakeTrustAthenzDomain()
 	crMap, err = privateCache.parseData(item)
 	if err != nil {
 		t.Error(err)
@@ -465,13 +485,35 @@ func TestAuthorize(t *testing.T) {
 		t.Error("Wrong authorization result, authorization should pass.")
 	}
 
-	// grant trust user access
+	// deny trust role members access
+	res, err = privateCache.authorize(trustusername, check)
+	if err != nil {
+		t.Error(err)
+	}
+	if res {
+		t.Error("Wrong authorization result, authorization should not pass because trustuser only has access to create services.")
+	}
+
+	// grant trust role members access
+	check = AthenzAccessCheck{
+		Action:   "create",
+		Resource: "home.domain:services",
+	}
 	res, err = privateCache.authorize(trustusername, check)
 	if err != nil {
 		t.Error(err)
 	}
 	if !res {
 		t.Error("Wrong authorization result, authorization should pass.")
+	}
+
+	// deny delegated user access because assume role for this member doesn't exist in trust domain
+	res, err = privateCache.authorize("invaliduser", check)
+	if err != nil {
+		t.Error(err)
+	}
+	if res {
+		t.Error("Wrong authorization result, authorization should not pass.")
 	}
 
 	// deny access
