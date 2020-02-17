@@ -111,6 +111,7 @@ func (c *Cache) parseData(item *v1.AthenzDomain) (roleMappings, error) {
 			role.RoleMembers, err = c.processTrustDomain(role.Trust, item, roleName)
 			if err != nil {
 				c.log.Printf("Error occurred when processing trust domain. Error: %v", err)
+				continue
 			}
 		}
 
