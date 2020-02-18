@@ -631,6 +631,24 @@ func TestAuthorize(t *testing.T) {
 		t.Error("Wrong authorization result, username's request should be allowed")
 	}
 
+	check = AthenzAccessCheck{
+		Action:   "delete",
+		Resource: "domain.does.not.exist:services",
+	}
+	res, err = privateCache.authorize(username, check)
+	if err == nil {
+		t.Error("there should be error because such domain doesn't exist in the cache")
+	}
+
+	check = AthenzAccessCheck{
+		Action:   "delete",
+		Resource: "domain.wrong.format.services",
+	}
+	res, err = privateCache.authorize(username, check)
+	if err == nil {
+		t.Error("there should be error because resource string is invalid")
+	}
+
 	// check resource does not exist in cache
 	check = AthenzAccessCheck{
 		Action:   "get",

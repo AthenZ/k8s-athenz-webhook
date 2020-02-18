@@ -302,7 +302,7 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 			}
 			// if we have already matched an allow assertion then we'll automatically skip any
 			// assertion that has allow effect since there is no point of matching it
-			if *assert.effect == zms.ALLOW && accessStatus == true {
+			if effect == zms.ALLOW && accessStatus == true {
 				continue
 			}
 			if assert.resource.MatchString(check.Resource) && assert.action.MatchString(check.Action) {
