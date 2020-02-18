@@ -265,10 +265,13 @@ func (c *Cache) deleteObj(item *v1.AthenzDomain) {
 }
 
 // authorize - authorize using cache data
+// here logic should be the same as zms access's logic
+// Refer to: https://github.com/yahoo/athenz/blob/master/servers/zts/src/main/java/com/yahoo/athenz/zts/ZTSAuthorizer.java#L131
 func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, error) {
+	accessStatus := false
 	domainName := strings.Split(check.Resource, ":")
 	if len(domainName) < 2 {
-		return false, errors.New("Error splitting domain name")
+		return accessStatus, errors.New("Error splitting domain name")
 	}
 
 	c.lock.RLock()
@@ -276,7 +279,7 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 	crMap := c.domainMap
 	domainData, ok := crMap[domainName[0]]
 	if !ok {
-		return false, fmt.Errorf("%s does not exist in cache map", domainName[0])
+		return accessStatus, fmt.Errorf("%s does not exist in cache map", domainName[0])
 	}
 	roles := []string{}
 	for role, members := range domainData.roleToPrincipals {
@@ -293,10 +296,22 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 	for _, role := range roles {
 		policies := domainData.roleToAssertion[role]
 		for _, assert := range policies {
-			if assert.resource.MatchString(check.Resource) && assert.action.MatchString(check.Action) && *assert.effect == zms.ALLOW {
-				return true, nil
+			effect := *assert.effect
+			if effect == 0 {
+				effect = zms.ALLOW
+			}
+			// if we have already matched an allow assertion then we'll automatically skip any
+			// assertion that has allow effect since there is no point of matching it
+			if *assert.effect == zms.ALLOW && accessStatus == true {
+				continue
+			}
+			if assert.resource.MatchString(check.Resource) && assert.action.MatchString(check.Action) {
+				if *assert.effect == zms.DENY {
+					return false, nil
+				}
+				accessStatus = true
 			}
 		}
 	}
-	return false, nil
+	return accessStatus, nil
 }

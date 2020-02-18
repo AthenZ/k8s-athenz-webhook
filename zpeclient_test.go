@@ -21,6 +21,7 @@ const (
 	username        = "user.name"
 	trustDomainName = "test.trust.domain"
 	trustusername   = "trustuser.name"
+	domainWithDeny  = "home.domain.deny"
 )
 
 var (
@@ -192,6 +193,84 @@ func getFakeTrustDomain() zms.SignedDomain {
 					RoleMembers: []*zms.RoleMember{
 						{
 							MemberName: zms.MemberName(trustusername),
+						},
+					},
+				},
+			},
+			Services: []*zms.ServiceIdentity{},
+			Entities: []*zms.Entity{},
+		},
+		KeyId:     "colo-env-1.1",
+		Signature: "signature",
+	}
+}
+
+func getFakeAthenzDomainWithExplicitDeny() *v1.AthenzDomain {
+	spec := v1.AthenzDomainSpec{
+		SignedDomain: getFakeDomainWithExplicitDeny(),
+	}
+	item := &v1.AthenzDomain{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: trustDomainName,
+		},
+		Spec: spec,
+	}
+	return item
+}
+
+func getFakeDomainWithExplicitDeny() zms.SignedDomain {
+	allow := zms.ALLOW
+	deny := zms.DENY
+	timestamp, err := rdl.TimestampParse("2020-02-17T20:29:10.305Z")
+	if err != nil {
+		panic(err)
+	}
+
+	return zms.SignedDomain{
+		Domain: &zms.DomainData{
+			Modified: timestamp,
+			Name:     zms.DomainName(domainWithDeny),
+			Policies: &zms.SignedPolicies{
+				Contents: &zms.DomainPolicies{
+					Domain: zms.DomainName(domainWithDeny),
+					Policies: []*zms.Policy{
+						{
+							Assertions: []*zms.Assertion{
+								{
+									Role:     domainWithDeny + ":role.admin",
+									Resource: domainWithDeny + ":*",
+									Action:   "*",
+									Effect:   &allow,
+								},
+							},
+							Modified: &timestamp,
+							Name:     zms.ResourceName(domainWithDeny + ":policy.admin"),
+						},
+						{
+							Assertions: []*zms.Assertion{
+								{
+									Role:     domainWithDeny + ":role.admin",
+									Resource: domainWithDeny + ":services",
+									Action:   "delete",
+									Effect:   &deny,
+								},
+							},
+							Modified: &timestamp,
+							Name:     zms.ResourceName(domainWithDeny + ":policy.admin"),
+						},
+					},
+				},
+				KeyId:     "col-env-1.1",
+				Signature: "signature-policy",
+			},
+			Roles: []*zms.Role{
+				{
+					Members:  []zms.MemberName{zms.MemberName(username)},
+					Modified: &timestamp,
+					Name:     zms.ResourceName(domainWithDeny + ":role.admin"),
+					RoleMembers: []*zms.RoleMember{
+						{
+							MemberName: zms.MemberName(username),
 						},
 					},
 				},
@@ -471,6 +550,12 @@ func TestAuthorize(t *testing.T) {
 		t.Error(err)
 	}
 	privateCache.domainMap[trustDomainName] = crMap
+	item = getFakeAthenzDomainWithExplicitDeny()
+	crMap, err = privateCache.parseData(item)
+	if err != nil {
+		t.Error(err)
+	}
+	privateCache.domainMap[domainWithDeny] = crMap
 
 	// grant access
 	check := AthenzAccessCheck{
@@ -524,6 +609,26 @@ func TestAuthorize(t *testing.T) {
 	res, err = privateCache.authorize("fakeclient", check)
 	if res {
 		t.Error("Wrong authorization result, fakeclient's request should be denied")
+	}
+
+	// test case: one policy has two assertions, first assertion with explicitly Allow,
+	// second assertion with explicitly Deny.
+	check = AthenzAccessCheck{
+		Action:   "delete",
+		Resource: "home.domain.deny:services",
+	}
+	res, err = privateCache.authorize(username, check)
+	if res {
+		t.Error("Wrong authorization result, username's request should be denied since assertion has an explicit DENY")
+	}
+
+	check = AthenzAccessCheck{
+		Action:   "create",
+		Resource: "home.domain.deny:services",
+	}
+	res, err = privateCache.authorize(username, check)
+	if !res {
+		t.Error("Wrong authorization result, username's request should be allowed")
 	}
 
 	// check resource does not exist in cache
