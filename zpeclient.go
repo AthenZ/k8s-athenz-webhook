@@ -22,8 +22,9 @@ var (
 
 // roleMappings - cr cache
 type roleMappings struct {
-	roleToPrincipals map[string][]*simplePrincipal
-	roleToAssertion  map[string][]*simpleAssertion
+	roleToPrincipals    map[string][]*simplePrincipal
+	roleToAssertion     map[string][]*simpleAssertion
+	roleToDenyAssertion map[string][]*simpleAssertion
 }
 
 // simplePrincipal - principal data
@@ -89,9 +90,11 @@ func NewZpeClient(crIndexInformer cache.SharedIndexInformer, log Logger) *Cache 
 func (c *Cache) parseData(item *v1.AthenzDomain) (roleMappings, error) {
 	roleToPrincipals := make(map[string][]*simplePrincipal)
 	roleToAssertion := make(map[string][]*simpleAssertion)
+	roleToDenyAssertion := make(map[string][]*simpleAssertion)
 	crMap := roleMappings{
-		roleToPrincipals: roleToPrincipals,
-		roleToAssertion:  roleToAssertion,
+		roleToPrincipals:    roleToPrincipals,
+		roleToAssertion:     roleToAssertion,
+		roleToDenyAssertion: roleToDenyAssertion,
 	}
 	if item == nil || item.Spec.SignedDomain.Domain == nil || item.Spec.SignedDomain.Domain.Policies == nil || item.Spec.SignedDomain.Domain.Policies.Contents == nil {
 		return crMap, errors.New("One of AthenzDomain, Domain field in SignedDomain, Domain Policies field or Policies Contents is nil")
@@ -172,11 +175,17 @@ func (c *Cache) parseData(item *v1.AthenzDomain) (roleMappings, error) {
 				action:   actionRegex,
 				effect:   effect,
 			}
-			_, ok := crMap.roleToAssertion[assertion.Role]
-			if !ok {
-				crMap.roleToAssertion[assertion.Role] = []*simpleAssertion{}
+			if *assertion.Effect == zms.DENY {
+				if _, ok := crMap.roleToDenyAssertion[assertion.Role]; !ok {
+					crMap.roleToDenyAssertion[assertion.Role] = []*simpleAssertion{}
+				}
+				crMap.roleToDenyAssertion[assertion.Role] = append(crMap.roleToDenyAssertion[assertion.Role], &simpleAssert)
+			} else {
+				if _, ok := crMap.roleToAssertion[assertion.Role]; !ok {
+					crMap.roleToAssertion[assertion.Role] = []*simpleAssertion{}
+				}
+				crMap.roleToAssertion[assertion.Role] = append(crMap.roleToAssertion[assertion.Role], &simpleAssert)
 			}
-			crMap.roleToAssertion[assertion.Role] = append(crMap.roleToAssertion[assertion.Role], &simpleAssert)
 		}
 	}
 
@@ -268,10 +277,9 @@ func (c *Cache) deleteObj(item *v1.AthenzDomain) {
 // here logic should be the same as zms access's logic
 // Refer to: https://github.com/yahoo/athenz/blob/master/servers/zts/src/main/java/com/yahoo/athenz/zts/ZTSAuthorizer.java#L131
 func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, error) {
-	accessStatus := false
 	domainName := strings.Split(check.Resource, ":")
 	if len(domainName) < 2 {
-		return accessStatus, errors.New("Error splitting domain name")
+		return false, errors.New("Error splitting domain name")
 	}
 
 	c.lock.RLock()
@@ -279,7 +287,7 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 	crMap := c.domainMap
 	domainData, ok := crMap[domainName[0]]
 	if !ok {
-		return accessStatus, fmt.Errorf("%s does not exist in cache map", domainName[0])
+		return false, fmt.Errorf("%s does not exist in cache map", domainName[0])
 	}
 	roles := []string{}
 	for role, members := range domainData.roleToPrincipals {
@@ -294,24 +302,24 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 	c.log.Printf("%d roles matched principal: %s on domain: %s", len(roles), principal, domainName[0])
 
 	for _, role := range roles {
-		policies := domainData.roleToAssertion[role]
-		for _, assert := range policies {
-			effect := *assert.effect
-			if effect == 0 {
-				effect = zms.ALLOW
-			}
-			// if we have already matched an allow assertion then we'll automatically skip any
-			// assertion that has allow effect since there is no point of matching it
-			if effect == zms.ALLOW && accessStatus == true {
-				continue
-			}
-			if assert.resource.MatchString(check.Resource) && assert.action.MatchString(check.Action) {
-				if *assert.effect == zms.DENY {
+		// check if role exists in deny assertion mapping, if exists, deny the check immediately.
+		if _, ok := domainData.roleToDenyAssertion[role]; ok {
+			policies := domainData.roleToDenyAssertion[role]
+			for _, assert := range policies {
+				if assert.resource.MatchString(check.Resource) && assert.action.MatchString(check.Action) {
 					return false, nil
 				}
-				accessStatus = true
+			}
+		}
+		// check role doesn't exist in deny assertion mapping, check if there is explicit allow for
+		// an assertion in roleToAssertion mapping.
+		policies := domainData.roleToAssertion[role]
+		for _, assert := range policies {
+			// check for explicit ALLOW, return if matched.
+			if assert.resource.MatchString(check.Resource) && assert.action.MatchString(check.Action) && *assert.effect == zms.ALLOW {
+				return true, nil
 			}
 		}
 	}
-	return accessStatus, nil
+	return false, nil
 }
