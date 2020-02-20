@@ -609,6 +609,9 @@ func TestAuthorize(t *testing.T) {
 		Resource: "home.domain:pods",
 	}
 	res, err = privateCache.authorize("fakeclient", check)
+	if err != nil {
+		t.Error(err)
+	}
 	if res {
 		t.Error("Wrong authorization result, fakeclient's request should be denied")
 	}
@@ -620,6 +623,9 @@ func TestAuthorize(t *testing.T) {
 		Resource: "home.domain.deny:services",
 	}
 	res, err = privateCache.authorize(username, check)
+	if err != nil {
+		t.Error(err)
+	}
 	if res {
 		t.Error("Wrong authorization result, username's request should be denied since assertion has an explicit DENY")
 	}
@@ -629,6 +635,9 @@ func TestAuthorize(t *testing.T) {
 		Resource: "home.domain.deny:services",
 	}
 	res, err = privateCache.authorize(username, check)
+	if err != nil {
+		t.Error(err)
+	}
 	if !res {
 		t.Error("Wrong authorization result, username's request should be allowed")
 	}
