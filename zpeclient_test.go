@@ -293,10 +293,12 @@ func newCache() *Cache {
 		log:             log.New(os.Stderr, "", log.LstdFlags),
 	}
 	roleToPrincipals := make(map[string][]*simplePrincipal)
-	roleToAssertion := make(map[string][]*simpleAssertion)
+	roleToAllowAssertion := make(map[string][]*simpleAssertion)
+	roleToDenyAssertion := make(map[string][]*simpleAssertion)
 	crMap := roleMappings{
-		roleToPrincipals: roleToPrincipals,
-		roleToAssertion:  roleToAssertion,
+		roleToPrincipals:     roleToPrincipals,
+		roleToAllowAssertion: roleToAllowAssertion,
+		roleToDenyAssertion:  roleToDenyAssertion,
 	}
 	c.crIndexInformer.GetStore().Add(ad.DeepCopy())
 	c.crIndexInformer.GetStore().Add(ad1.DeepCopy())
@@ -327,7 +329,7 @@ func TestParseData(t *testing.T) {
 		t.Error("Failed to create RoleToPrincipals map")
 	}
 
-	if len(crMap.roleToAssertion) != 3 || crMap.roleToPrincipals["home.domain:role.admin"] == nil || crMap.roleToPrincipals["home.domain:role.delegated"] == nil {
+	if len(crMap.roleToAllowAssertion) != 3 || crMap.roleToPrincipals["home.domain:role.admin"] == nil || crMap.roleToPrincipals["home.domain:role.delegated"] == nil {
 		t.Error("Failed to create RoleToAssertion map")
 	}
 }
@@ -438,7 +440,7 @@ func TestParseDataPolicy(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if len(crmap.roleToAssertion) != 0 {
+	if len(crmap.roleToAllowAssertion) != 0 {
 		t.Error("map entries shouldn't be added because policies are nil or empty")
 	}
 
@@ -456,7 +458,7 @@ func TestParseDataPolicy(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if len(crmap.roleToAssertion) != 0 {
+	if len(crmap.roleToAllowAssertion) != 0 {
 		t.Error("map entries shouldn't be added because assertions are nil or empty")
 	}
 }
