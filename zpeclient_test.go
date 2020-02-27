@@ -12,7 +12,9 @@ import (
 	v1 "github.com/yahoo/k8s-athenz-syncer/pkg/apis/athenz/v1"
 	"github.com/yahoo/k8s-athenz-syncer/pkg/client/clientset/versioned/fake"
 	athenzInformer "github.com/yahoo/k8s-athenz-syncer/pkg/client/informers/externalversions/athenz/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -38,6 +40,24 @@ var (
 		},
 		Spec: v1.AthenzDomainSpec{
 			SignedDomain: getFakeTrustDomain(),
+		},
+	}
+
+	cm = &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-cm",
+		},
+		Data: map[string]string{
+			"latest_contact": time.Now().Format(time.RFC3339Nano),
+		},
+	}
+
+	cm1 = &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-cm1",
+		},
+		Data: map[string]string{
+			"latest_contact": "2020-02-11T17:44:38.080Z",
 		},
 	}
 )
@@ -208,8 +228,12 @@ func newCache() *Cache {
 	domainMap := make(map[string]roleMappings)
 	athenzclientset := fake.NewSimpleClientset()
 	crIndexInformer := athenzInformer.NewAthenzDomainInformer(athenzclientset, 0, cache.Indexers{})
+	k8sclientset := fake.NewSimpleClientset()
+	cmListWatcher := cache.NewListWatchFromClient(k8sclientset.AthenzV1().RESTClient(), "", "", fields.Everything())
+	cmIndexInformer := cache.NewSharedIndexInformer(cmListWatcher, &corev1.ConfigMap{}, time.Hour, cache.Indexers{})
 	c := &Cache{
 		crIndexInformer: crIndexInformer,
+		cmIndexInformer: cmIndexInformer,
 		domainMap:       domainMap,
 		log:             log.New(os.Stderr, "", log.LstdFlags),
 	}
@@ -221,6 +245,9 @@ func newCache() *Cache {
 	}
 	c.crIndexInformer.GetStore().Add(ad.DeepCopy())
 	c.crIndexInformer.GetStore().Add(ad1.DeepCopy())
+	c.cmIndexInformer.GetStore().Add(cm.DeepCopy())
+	c.cmIndexInformer.GetStore().Add(cm1.DeepCopy())
+
 	c.domainMap[domainName] = crMap
 	c.domainMap[trustDomainName] = crMap
 	return c
@@ -562,5 +589,26 @@ func TestAuthorize(t *testing.T) {
 	}
 	if res {
 		t.Error("Wrong authorization result. Membership has expired")
+	}
+}
+
+func TestCheckUpdateTime(t *testing.T) {
+	privateCache := newCache()
+	// check if last update time is less than 2 hrs
+	res, err := privateCache.checkUpdateTime("test-cm")
+	if err != nil {
+		t.Error("function should not return error")
+	}
+	if !res {
+		t.Error("function should return true")
+	}
+
+	// check if last update is more than 2 hrs
+	res, err = privateCache.checkUpdateTime("test-cm1")
+	if err == nil {
+		t.Error("function should return error about expired time")
+	}
+	if res {
+		t.Error("function should return false")
 	}
 }

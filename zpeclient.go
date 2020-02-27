@@ -10,6 +10,7 @@ import (
 
 	"github.com/yahoo/athenz/clients/go/zms"
 	v1 "github.com/yahoo/k8s-athenz-syncer/pkg/apis/athenz/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -42,16 +43,18 @@ type simpleAssertion struct {
 // Cache - cache for athenzdomains CR
 type Cache struct {
 	crIndexInformer cache.SharedIndexInformer
+	cmIndexInformer cache.SharedIndexInformer
 	domainMap       map[string]roleMappings
 	lock            sync.RWMutex
 	log             Logger
 }
 
 // NewZpeClient - generate new athenzdomains cr cache
-func NewZpeClient(crIndexInformer cache.SharedIndexInformer, log Logger) *Cache {
+func NewZpeClient(crIndexInformer cache.SharedIndexInformer, cmIndexInformer cache.SharedIndexInformer, log Logger) *Cache {
 	domainMap := make(map[string]roleMappings)
 	privateCache := &Cache{
 		crIndexInformer: crIndexInformer,
+		cmIndexInformer: cmIndexInformer,
 		domainMap:       domainMap,
 		log:             log,
 	}
@@ -299,4 +302,40 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 		}
 	}
 	return false, nil
+}
+
+func (c *Cache) checkUpdateTime(configmap string) (res bool, err error) {
+	var timestamp interface{}
+	timestamp, exist, err := c.cmIndexInformer.GetStore().GetByKey(configmap)
+	if err != nil {
+		return false, err
+	}
+	if !exist {
+		return false, fmt.Errorf("unable to get config map athenzcall-config from configmap informer cache")
+	}
+	obj, ok := timestamp.(*corev1.ConfigMap)
+	if !ok {
+		return false, fmt.Errorf("Unable to cast interface to config map object")
+	}
+	c.log.Println("latest contact time is: ", obj.Data["latest_contact"])
+	lastUpdateTime := obj.Data["latest_contact"]
+	if len(lastUpdateTime) > 0 && lastUpdateTime[0] == '"' {
+		lastUpdateTime = lastUpdateTime[1:]
+	}
+	if len(lastUpdateTime) > 0 && lastUpdateTime[len(lastUpdateTime)-1] == '"' {
+		lastUpdateTime = lastUpdateTime[:len(lastUpdateTime)-1]
+	}
+
+	t, _ := time.Parse(time.RFC3339Nano, lastUpdateTime)
+	t1 := time.Now()
+	t1.Format(time.RFC3339Nano)
+	diff := t1.Sub(t)
+
+	c.log.Println("time lapsed since last config map update: ", diff)
+	var max time.Duration = 2 * time.Hour
+	if diff < max {
+		c.log.Println("last update time is less than 2 hour, checking cache for authorization")
+		return true, nil
+	}
+	return false, fmt.Errorf("athenzcall-config has not been updated in the last two hours")
 }
