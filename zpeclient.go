@@ -175,7 +175,7 @@ func (c *Cache) parseData(item *v1.AthenzDomain) (roleMappings, error) {
 				action:   actionRegex,
 				effect:   effect,
 			}
-			if *assertion.Effect != 0 && *assertion.Effect == zms.DENY {
+			if *effect == zms.DENY {
 				if _, ok := crMap.roleToDenyAssertion[assertion.Role]; !ok {
 					crMap.roleToDenyAssertion[assertion.Role] = []*simpleAssertion{}
 				}
