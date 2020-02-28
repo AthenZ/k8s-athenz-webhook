@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ardielle/ardielle-go/rdl"
+	"github.com/stretchr/testify/assert"
 	"github.com/yahoo/athenz/clients/go/zms"
 	v1 "github.com/yahoo/k8s-athenz-syncer/pkg/apis/athenz/v1"
 	"github.com/yahoo/k8s-athenz-syncer/pkg/client/clientset/versioned/fake"
@@ -649,6 +650,8 @@ func TestAuthorize(t *testing.T) {
 	res, err = privateCache.authorize(username, check)
 	if err == nil {
 		t.Error("there should be error because such domain doesn't exist in the cache")
+	} else {
+		assert.Equal(t, err.Error(), "domain.does.not.exist does not exist in cache map")
 	}
 
 	check = AthenzAccessCheck{
@@ -658,6 +661,8 @@ func TestAuthorize(t *testing.T) {
 	res, err = privateCache.authorize(username, check)
 	if err == nil {
 		t.Error("there should be error because resource string is invalid")
+	} else {
+		assert.Equal(t, err.Error(), "Error splitting domain name")
 	}
 
 	// check resource does not exist in cache
