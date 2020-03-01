@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ardielle/ardielle-go/rdl"
+	"github.com/stretchr/testify/assert"
 	"github.com/yahoo/athenz/clients/go/zms"
 	v1 "github.com/yahoo/k8s-athenz-syncer/pkg/apis/athenz/v1"
 	"github.com/yahoo/k8s-athenz-syncer/pkg/client/clientset/versioned/fake"
@@ -595,7 +596,8 @@ func TestAuthorize(t *testing.T) {
 func TestCheckUpdateTime(t *testing.T) {
 	privateCache := newCache()
 	// check if last update time is less than 2 hrs
-	res, err := privateCache.checkUpdateTime("test-cm")
+	privateCache.parseUpdateTime(cm)
+	res, err := privateCache.checkUpdateTime()
 	if err != nil {
 		t.Error("function should not return error")
 	}
@@ -604,9 +606,12 @@ func TestCheckUpdateTime(t *testing.T) {
 	}
 
 	// check if last update is more than 2 hrs
-	res, err = privateCache.checkUpdateTime("test-cm1")
+	privateCache.parseUpdateTime(cm1)
+	res, err = privateCache.checkUpdateTime()
 	if err == nil {
 		t.Error("function should return error about expired time")
+	} else {
+		assert.Equal(t, err.Error(), "athenzcall-config has not been updated in the last two hours")
 	}
 	if res {
 		t.Error("function should return false")

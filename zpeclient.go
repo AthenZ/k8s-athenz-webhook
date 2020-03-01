@@ -45,6 +45,7 @@ type Cache struct {
 	crIndexInformer cache.SharedIndexInformer
 	cmIndexInformer cache.SharedIndexInformer
 	domainMap       map[string]roleMappings
+	lastUpdate      string
 	lock            sync.RWMutex
 	log             Logger
 }
@@ -52,9 +53,11 @@ type Cache struct {
 // NewZpeClient - generate new athenzdomains cr cache
 func NewZpeClient(crIndexInformer cache.SharedIndexInformer, cmIndexInformer cache.SharedIndexInformer, log Logger) *Cache {
 	domainMap := make(map[string]roleMappings)
+	var lastUpdate string
 	privateCache := &Cache{
 		crIndexInformer: crIndexInformer,
 		cmIndexInformer: cmIndexInformer,
+		lastUpdate:      lastUpdate,
 		domainMap:       domainMap,
 		log:             log,
 	}
@@ -82,6 +85,22 @@ func NewZpeClient(crIndexInformer cache.SharedIndexInformer, cmIndexInformer cac
 				return
 			}
 			privateCache.deleteObj(item)
+		},
+	})
+	cmIndexInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			err := privateCache.parseUpdateTime(obj)
+			if err != nil {
+				log.Println("Unable to convert informer store item into AthenzDomain type.")
+				return
+			}
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			err := privateCache.parseUpdateTime(newObj)
+			if err != nil {
+				log.Println("Unable to convert informer store item into AthenzDomain type.")
+				return
+			}
 		},
 	})
 	return privateCache
@@ -304,29 +323,24 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 	return false, nil
 }
 
-func (c *Cache) checkUpdateTime(configmap string) (res bool, err error) {
-	var timestamp interface{}
-	timestamp, exist, err := c.cmIndexInformer.GetStore().GetByKey(configmap)
-	if err != nil {
-		return false, err
-	}
-	if !exist {
-		return false, fmt.Errorf("unable to get config map athenzcall-config from configmap informer cache")
-	}
-	obj, ok := timestamp.(*corev1.ConfigMap)
+// parseUpdateTime - read the last update time as string from configmap, store in the cache
+func (c *Cache) parseUpdateTime(configmap interface{}) error {
+	obj, ok := configmap.(*corev1.ConfigMap)
 	if !ok {
-		return false, fmt.Errorf("Unable to cast interface to config map object")
+		return fmt.Errorf("Unable to cast interface to config map object")
 	}
 	c.log.Println("latest contact time is: ", obj.Data["latest_contact"])
-	lastUpdateTime := obj.Data["latest_contact"]
-	if len(lastUpdateTime) > 0 && lastUpdateTime[0] == '"' {
-		lastUpdateTime = lastUpdateTime[1:]
-	}
-	if len(lastUpdateTime) > 0 && lastUpdateTime[len(lastUpdateTime)-1] == '"' {
-		lastUpdateTime = lastUpdateTime[:len(lastUpdateTime)-1]
-	}
+	lastUpdateTime := strings.ReplaceAll(obj.Data["latest_contact"], `"`, "")
+	c.lastUpdate = lastUpdateTime
+	return nil
+}
 
-	t, _ := time.Parse(time.RFC3339Nano, lastUpdateTime)
+// checkUpdateTime - check the last update timestamp stored in the cache is less/more than 2 hours period
+func (c *Cache) checkUpdateTime() (res bool, err error) {
+	t, err := time.Parse(time.RFC3339Nano, c.lastUpdate)
+	if err != nil {
+		return false, fmt.Errorf("timestamp format in syncer config map is wrong")
+	}
 	t1 := time.Now()
 	t1.Format(time.RFC3339Nano)
 	diff := t1.Sub(t)
