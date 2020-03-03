@@ -15,7 +15,6 @@ import (
 const (
 	authzSupportedVersion = "authorization.k8s.io/v1beta1"
 	authzSupportedKind    = "SubjectAccessReview"
-	syncerConfigMap       = "kube-yahoo/athenzcall-config"
 )
 
 // AuthzError is an error implementation that can provide custom
@@ -187,15 +186,16 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 	if a.AuthorizationConfig.Config.UseCache {
 		// check syncer's last contact time with athenz, if it is more than two hours,
 		// fall back to zms/zts.
+		a.AuthorizationConfig.Config.Cache.lock.Lock()
 		if a.AuthorizationConfig.Config.Cache.cacheStatus {
 			decision := a.useCacheEval(log, principal, checks)
 			if decision != nil && !a.AuthorizationConfig.Config.DryRun {
 				return decision
 			}
 		} else {
-			log.Printf("Cache has not been updated for more than %v hours, failing back to zts/zms for authorization.", a.AuthorizationConfig.Config.Cache.maxContactTime)
-			log.Println("last update time is: ", a.AuthorizationConfig.Config.Cache.lastUpdate)
+			log.Printf("Cache has not been updated for more than %v hours, last update time is: %v, failing back to zts/zms for authorization. ", a.AuthorizationConfig.Config.Cache.maxContactTime, a.AuthorizationConfig.Config.Cache.lastUpdate)
 		}
+		a.AuthorizationConfig.Config.Cache.lock.Unlock()
 	}
 	for _, check := range checks {
 		if a.AthenzClientAuthnx509Mode {

@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	lastUpdateKeyField string = "latest_contact"
-	CacheActive               = true
-	CacheStale                = false
+	lastUpdateKeyField = "latest_contact"
+	CacheActive        = true
+	CacheStale         = false
 )
 
 var (
@@ -62,16 +62,16 @@ type Cache struct {
 func NewZpeClient(crIndexInformer cache.SharedIndexInformer, cmIndexInformer cache.SharedIndexInformer, maxContactTime time.Duration, log Logger) *Cache {
 	domainMap := make(map[string]roleMappings)
 	var lastUpdate time.Time
-	// initalize cache status to stale
-	cacheStatus := CacheStale
+
 	privateCache := &Cache{
 		crIndexInformer: crIndexInformer,
 		cmIndexInformer: cmIndexInformer,
 		lastUpdate:      lastUpdate,
-		cacheStatus:     cacheStatus,
-		domainMap:       domainMap,
-		maxContactTime:  maxContactTime,
-		log:             log,
+		// initalize cache status to stale
+		cacheStatus:    CacheStale,
+		domainMap:      domainMap,
+		maxContactTime: maxContactTime,
+		log:            log,
 	}
 	crIndexInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
@@ -338,8 +338,6 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 // parseUpdateTime - read the last update time as string from configmap, store in the cache
 func (c *Cache) parseUpdateTime(configmap interface{}) error {
 	var lastUpdateTime string
-	c.lock.Lock()
-	defer c.lock.Unlock()
 
 	obj, ok := configmap.(*corev1.ConfigMap)
 	if !ok {
@@ -355,10 +353,12 @@ func (c *Cache) parseUpdateTime(configmap interface{}) error {
 	var err error
 
 	// update last athenz contact time in the cache object
+	c.lock.Lock()
 	c.lastUpdate, err = time.Parse(time.RFC3339Nano, lastUpdateTime)
 	if err != nil {
 		return fmt.Errorf("timestamp format in syncer config map is wrong")
 	}
+	c.lock.Unlock()
 	// update cache status boolean in the cache object
 	c.updateCacheStatus()
 	return nil
@@ -369,10 +369,13 @@ func (c *Cache) updateCacheStatus() {
 	t := time.Now()
 	t.Format(time.RFC3339Nano)
 	diff := t.Sub(c.lastUpdate)
+	c.lock.Lock()
 	if diff < c.maxContactTime {
 		c.cacheStatus = CacheActive
+		c.lock.Unlock()
 		return
 	}
 	c.cacheStatus = CacheStale
+	c.lock.Unlock()
 	return
 }
