@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ardielle/ardielle-go/rdl"
+	"github.com/stretchr/testify/assert"
 	"github.com/yahoo/athenz/clients/go/zms"
 	v1 "github.com/yahoo/k8s-athenz-syncer/pkg/apis/athenz/v1"
 	"github.com/yahoo/k8s-athenz-syncer/pkg/client/clientset/versioned/fake"
@@ -21,6 +22,7 @@ const (
 	username        = "user.name"
 	trustDomainName = "test.trust.domain"
 	trustusername   = "trustuser.name"
+	domainWithDeny  = "home.domain.deny"
 )
 
 var (
@@ -204,6 +206,84 @@ func getFakeTrustDomain() zms.SignedDomain {
 	}
 }
 
+func getFakeAthenzDomainWithExplicitDeny() *v1.AthenzDomain {
+	spec := v1.AthenzDomainSpec{
+		SignedDomain: getFakeDomainWithExplicitDeny(),
+	}
+	item := &v1.AthenzDomain{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: trustDomainName,
+		},
+		Spec: spec,
+	}
+	return item
+}
+
+func getFakeDomainWithExplicitDeny() zms.SignedDomain {
+	allow := zms.ALLOW
+	deny := zms.DENY
+	timestamp, err := rdl.TimestampParse("2020-02-17T20:29:10.305Z")
+	if err != nil {
+		panic(err)
+	}
+
+	return zms.SignedDomain{
+		Domain: &zms.DomainData{
+			Modified: timestamp,
+			Name:     zms.DomainName(domainWithDeny),
+			Policies: &zms.SignedPolicies{
+				Contents: &zms.DomainPolicies{
+					Domain: zms.DomainName(domainWithDeny),
+					Policies: []*zms.Policy{
+						{
+							Assertions: []*zms.Assertion{
+								{
+									Role:     domainWithDeny + ":role.admin",
+									Resource: domainWithDeny + ":*",
+									Action:   "*",
+									Effect:   &allow,
+								},
+							},
+							Modified: &timestamp,
+							Name:     zms.ResourceName(domainWithDeny + ":policy.admin"),
+						},
+						{
+							Assertions: []*zms.Assertion{
+								{
+									Role:     domainWithDeny + ":role.admin",
+									Resource: domainWithDeny + ":services",
+									Action:   "delete",
+									Effect:   &deny,
+								},
+							},
+							Modified: &timestamp,
+							Name:     zms.ResourceName(domainWithDeny + ":policy.admin"),
+						},
+					},
+				},
+				KeyId:     "col-env-1.1",
+				Signature: "signature-policy",
+			},
+			Roles: []*zms.Role{
+				{
+					Members:  []zms.MemberName{zms.MemberName(username)},
+					Modified: &timestamp,
+					Name:     zms.ResourceName(domainWithDeny + ":role.admin"),
+					RoleMembers: []*zms.RoleMember{
+						{
+							MemberName: zms.MemberName(username),
+						},
+					},
+				},
+			},
+			Services: []*zms.ServiceIdentity{},
+			Entities: []*zms.Entity{},
+		},
+		KeyId:     "colo-env-1.1",
+		Signature: "signature",
+	}
+}
+
 func newCache() *Cache {
 	domainMap := make(map[string]roleMappings)
 	athenzclientset := fake.NewSimpleClientset()
@@ -214,10 +294,12 @@ func newCache() *Cache {
 		log:             log.New(os.Stderr, "", log.LstdFlags),
 	}
 	roleToPrincipals := make(map[string][]*simplePrincipal)
-	roleToAssertion := make(map[string][]*simpleAssertion)
+	roleToAllowAssertion := make(map[string][]*simpleAssertion)
+	roleToDenyAssertion := make(map[string][]*simpleAssertion)
 	crMap := roleMappings{
-		roleToPrincipals: roleToPrincipals,
-		roleToAssertion:  roleToAssertion,
+		roleToPrincipals:     roleToPrincipals,
+		roleToAllowAssertion: roleToAllowAssertion,
+		roleToDenyAssertion:  roleToDenyAssertion,
 	}
 	c.crIndexInformer.GetStore().Add(ad.DeepCopy())
 	c.crIndexInformer.GetStore().Add(ad1.DeepCopy())
@@ -248,7 +330,7 @@ func TestParseData(t *testing.T) {
 		t.Error("Failed to create RoleToPrincipals map")
 	}
 
-	if len(crMap.roleToAssertion) != 3 || crMap.roleToPrincipals["home.domain:role.admin"] == nil || crMap.roleToPrincipals["home.domain:role.delegated"] == nil {
+	if len(crMap.roleToAllowAssertion) != 3 || crMap.roleToPrincipals["home.domain:role.admin"] == nil || crMap.roleToPrincipals["home.domain:role.delegated"] == nil {
 		t.Error("Failed to create RoleToAssertion map")
 	}
 }
@@ -359,7 +441,7 @@ func TestParseDataPolicy(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if len(crmap.roleToAssertion) != 0 {
+	if len(crmap.roleToAllowAssertion) != 0 {
 		t.Error("map entries shouldn't be added because policies are nil or empty")
 	}
 
@@ -377,7 +459,7 @@ func TestParseDataPolicy(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if len(crmap.roleToAssertion) != 0 {
+	if len(crmap.roleToAllowAssertion) != 0 {
 		t.Error("map entries shouldn't be added because assertions are nil or empty")
 	}
 }
@@ -471,6 +553,12 @@ func TestAuthorize(t *testing.T) {
 		t.Error(err)
 	}
 	privateCache.domainMap[trustDomainName] = crMap
+	item = getFakeAthenzDomainWithExplicitDeny()
+	crMap, err = privateCache.parseData(item)
+	if err != nil {
+		t.Error(err)
+	}
+	privateCache.domainMap[domainWithDeny] = crMap
 
 	// grant access
 	check := AthenzAccessCheck{
@@ -522,8 +610,59 @@ func TestAuthorize(t *testing.T) {
 		Resource: "home.domain:pods",
 	}
 	res, err = privateCache.authorize("fakeclient", check)
+	if err != nil {
+		t.Error(err)
+	}
 	if res {
 		t.Error("Wrong authorization result, fakeclient's request should be denied")
+	}
+
+	// test case: one policy has two assertions, first assertion with explicitly Allow,
+	// second assertion with explicitly Deny.
+	check = AthenzAccessCheck{
+		Action:   "delete",
+		Resource: "home.domain.deny:services",
+	}
+	res, err = privateCache.authorize(username, check)
+	if err != nil {
+		t.Error(err)
+	}
+	if res {
+		t.Error("Wrong authorization result, username's request should be denied since assertion has an explicit DENY")
+	}
+
+	check = AthenzAccessCheck{
+		Action:   "create",
+		Resource: "home.domain.deny:services",
+	}
+	res, err = privateCache.authorize(username, check)
+	if err != nil {
+		t.Error(err)
+	}
+	if !res {
+		t.Error("Wrong authorization result, username's request should be allowed")
+	}
+
+	check = AthenzAccessCheck{
+		Action:   "delete",
+		Resource: "domain.does.not.exist:services",
+	}
+	res, err = privateCache.authorize(username, check)
+	if err == nil {
+		t.Error("there should be error because such domain doesn't exist in the cache")
+	} else {
+		assert.Equal(t, err.Error(), "domain.does.not.exist does not exist in cache map")
+	}
+
+	check = AthenzAccessCheck{
+		Action:   "delete",
+		Resource: "domain.wrong.format.services",
+	}
+	res, err = privateCache.authorize(username, check)
+	if err == nil {
+		t.Error("there should be error because resource string is invalid")
+	} else {
+		assert.Equal(t, err.Error(), "Error splitting domain name")
 	}
 
 	// check resource does not exist in cache
