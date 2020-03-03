@@ -44,6 +44,14 @@ var (
 		},
 	}
 
+	cm0 = &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-cm",
+		},
+		Data: map[string]string{
+			"latest_contact": "wrong time format",
+		},
+	}
 	cm = &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-cm",
@@ -595,25 +603,27 @@ func TestAuthorize(t *testing.T) {
 
 func TestCheckUpdateTime(t *testing.T) {
 	privateCache := newCache()
-	// check if last update time is less than 2 hrs
-	privateCache.parseUpdateTime(cm)
-	res, err := privateCache.checkUpdateTime()
-	if err != nil {
-		t.Error("function should not return error")
-	}
-	if !res {
-		t.Error("function should return true")
+	// wrong cm input, should give error
+	err := privateCache.parseUpdateTime(cm0)
+	if err == nil {
+		t.Error("parseUpdateTime function should return error")
+	} else {
+		assert.Equal(t, err.Error(), "timestamp format in syncer config map is wrong")
 	}
 
+	// check if last update time is less than 2 hrs
+	err = privateCache.parseUpdateTime(cm)
+	if err != nil {
+		t.Error("parseUpdateTime function should not return error")
+	}
+	privateCache.updateCacheStatus()
+	assert.Equal(t, privateCache.cacheStatus, true)
+
 	// check if last update is more than 2 hrs
-	privateCache.parseUpdateTime(cm1)
-	res, err = privateCache.checkUpdateTime()
-	if err == nil {
-		t.Error("function should return error about expired time")
-	} else {
-		assert.Equal(t, err.Error(), "athenzcall-config has not been updated in the last two hours")
+	err = privateCache.parseUpdateTime(cm1)
+	if err != nil {
+		t.Error("parseUpdateTime function should not return error")
 	}
-	if res {
-		t.Error("function should return false")
-	}
+	privateCache.updateCacheStatus()
+	assert.Equal(t, privateCache.cacheStatus, false)
 }

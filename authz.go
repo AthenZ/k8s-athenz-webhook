@@ -187,15 +187,14 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 	if a.AuthorizationConfig.Config.UseCache {
 		// check syncer's last contact time with athenz, if it is more than two hours,
 		// fall back to zms/zts.
-		res, err := a.AuthorizationConfig.Config.Cache.checkUpdateTime()
-		if err != nil {
-			log.Printf("get athenzcall-config config map failed with error: %v, failing back to zts/zms for authorization.\n", err)
-		}
-		if res && err != nil {
+		if a.AuthorizationConfig.Config.Cache.cacheStatus {
 			decision := a.useCacheEval(log, principal, checks)
 			if decision != nil && !a.AuthorizationConfig.Config.DryRun {
 				return decision
 			}
+		} else {
+			log.Println("Cache has not been updated for more than two hours, failing back to zts/zms for authorization.")
+			log.Println("last update time is: ", a.AuthorizationConfig.Config.Cache.lastUpdate)
 		}
 	}
 	for _, check := range checks {

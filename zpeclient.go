@@ -14,6 +14,13 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+const (
+	maxContactTime     time.Duration = 2 * time.Hour
+	lastUpdateKeyField string        = "latest_contact"
+	CacheActive                      = true
+	CacheStale                       = false
+)
+
 var (
 	replacer = strings.NewReplacer(".*", ".*", "*", ".*")
 	// roleReplacer is meant to match regex pattern that athenz supports
@@ -45,7 +52,8 @@ type Cache struct {
 	crIndexInformer cache.SharedIndexInformer
 	cmIndexInformer cache.SharedIndexInformer
 	domainMap       map[string]roleMappings
-	lastUpdate      string
+	lastUpdate      time.Time
+	cacheStatus     bool
 	lock            sync.RWMutex
 	log             Logger
 }
@@ -53,11 +61,14 @@ type Cache struct {
 // NewZpeClient - generate new athenzdomains cr cache
 func NewZpeClient(crIndexInformer cache.SharedIndexInformer, cmIndexInformer cache.SharedIndexInformer, log Logger) *Cache {
 	domainMap := make(map[string]roleMappings)
-	var lastUpdate string
+	var lastUpdate time.Time
+	// initalize cache status to stale
+	cacheStatus := CacheStale
 	privateCache := &Cache{
 		crIndexInformer: crIndexInformer,
 		cmIndexInformer: cmIndexInformer,
 		lastUpdate:      lastUpdate,
+		cacheStatus:     cacheStatus,
 		domainMap:       domainMap,
 		log:             log,
 	}
@@ -91,14 +102,14 @@ func NewZpeClient(crIndexInformer cache.SharedIndexInformer, cmIndexInformer cac
 		AddFunc: func(obj interface{}) {
 			err := privateCache.parseUpdateTime(obj)
 			if err != nil {
-				log.Println("Unable to convert informer store item into AthenzDomain type.")
+				log.Println("Unable to convert informer store item into ConfigMap type.")
 				return
 			}
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			err := privateCache.parseUpdateTime(newObj)
 			if err != nil {
-				log.Println("Unable to convert informer store item into AthenzDomain type.")
+				log.Println("Unable to convert informer store item into ConfigMap type.")
 				return
 			}
 		},
@@ -325,31 +336,42 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 
 // parseUpdateTime - read the last update time as string from configmap, store in the cache
 func (c *Cache) parseUpdateTime(configmap interface{}) error {
+	var lastUpdateTime string
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	obj, ok := configmap.(*corev1.ConfigMap)
 	if !ok {
 		return fmt.Errorf("Unable to cast interface to config map object")
 	}
-	c.log.Println("latest contact time is: ", obj.Data["latest_contact"])
-	lastUpdateTime := strings.ReplaceAll(obj.Data["latest_contact"], `"`, "")
-	c.lastUpdate = lastUpdateTime
+
+	// check if lastUpdateKeyField exists in the configmap
+	if _, ok = obj.Data[lastUpdateKeyField]; ok {
+		lastUpdateTime = strings.ReplaceAll(obj.Data[lastUpdateKeyField], `"`, "")
+	} else {
+		return fmt.Errorf("configmap format is wrong, it doesn't have a field called: %v", lastUpdateKeyField)
+	}
+	var err error
+
+	// update last athenz contact time in the cache object
+	c.lastUpdate, err = time.Parse(time.RFC3339Nano, lastUpdateTime)
+	if err != nil {
+		return fmt.Errorf("timestamp format in syncer config map is wrong")
+	}
+	// update cache status boolean in the cache object
+	c.updateCacheStatus()
 	return nil
 }
 
-// checkUpdateTime - check the last update timestamp stored in the cache is less/more than 2 hours period
-func (c *Cache) checkUpdateTime() (res bool, err error) {
-	t, err := time.Parse(time.RFC3339Nano, c.lastUpdate)
-	if err != nil {
-		return false, fmt.Errorf("timestamp format in syncer config map is wrong")
+// updateCacheStatus - read lastUpdate variable, compare with current time and update on cache status
+func (c *Cache) updateCacheStatus() {
+	t := time.Now()
+	t.Format(time.RFC3339Nano)
+	diff := t.Sub(c.lastUpdate)
+	if diff < maxContactTime {
+		c.cacheStatus = CacheActive
+		return
 	}
-	t1 := time.Now()
-	t1.Format(time.RFC3339Nano)
-	diff := t1.Sub(t)
-
-	c.log.Println("time lapsed since last config map update: ", diff)
-	var max time.Duration = 2 * time.Hour
-	if diff < max {
-		c.log.Println("last update time is less than 2 hour, checking cache for authorization")
-		return true, nil
-	}
-	return false, fmt.Errorf("athenzcall-config has not been updated in the last two hours")
+	c.cacheStatus = CacheStale
+	return
 }
