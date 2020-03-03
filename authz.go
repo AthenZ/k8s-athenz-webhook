@@ -193,7 +193,7 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 				return decision
 			}
 		} else {
-			log.Println("Cache has not been updated for more than two hours, failing back to zts/zms for authorization.")
+			log.Printf("Cache has not been updated for more than %v hours, failing back to zts/zms for authorization.", a.AuthorizationConfig.Config.Cache.maxContactTime)
 			log.Println("last update time is: ", a.AuthorizationConfig.Config.Cache.lastUpdate)
 		}
 	}

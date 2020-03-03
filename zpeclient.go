@@ -15,10 +15,9 @@ import (
 )
 
 const (
-	maxContactTime     time.Duration = 2 * time.Hour
-	lastUpdateKeyField string        = "latest_contact"
-	CacheActive                      = true
-	CacheStale                       = false
+	lastUpdateKeyField string = "latest_contact"
+	CacheActive               = true
+	CacheStale                = false
 )
 
 var (
@@ -56,10 +55,11 @@ type Cache struct {
 	cacheStatus     bool
 	lock            sync.RWMutex
 	log             Logger
+	maxContactTime  time.Duration
 }
 
 // NewZpeClient - generate new athenzdomains cr cache
-func NewZpeClient(crIndexInformer cache.SharedIndexInformer, cmIndexInformer cache.SharedIndexInformer, log Logger) *Cache {
+func NewZpeClient(crIndexInformer cache.SharedIndexInformer, cmIndexInformer cache.SharedIndexInformer, maxContactTime time.Duration, log Logger) *Cache {
 	domainMap := make(map[string]roleMappings)
 	var lastUpdate time.Time
 	// initalize cache status to stale
@@ -70,6 +70,7 @@ func NewZpeClient(crIndexInformer cache.SharedIndexInformer, cmIndexInformer cac
 		lastUpdate:      lastUpdate,
 		cacheStatus:     cacheStatus,
 		domainMap:       domainMap,
+		maxContactTime:  maxContactTime,
 		log:             log,
 	}
 	crIndexInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -368,7 +369,7 @@ func (c *Cache) updateCacheStatus() {
 	t := time.Now()
 	t.Format(time.RFC3339Nano)
 	diff := t.Sub(c.lastUpdate)
-	if diff < maxContactTime {
+	if diff < c.maxContactTime {
 		c.cacheStatus = CacheActive
 		return
 	}
