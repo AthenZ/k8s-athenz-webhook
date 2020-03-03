@@ -603,6 +603,7 @@ func TestAuthorize(t *testing.T) {
 
 func TestCheckUpdateTime(t *testing.T) {
 	privateCache := newCache()
+	privateCache.maxContactTime = 2 * time.Hour
 	// wrong cm input, should give error
 	err := privateCache.parseUpdateTime(cm0)
 	if err == nil {
