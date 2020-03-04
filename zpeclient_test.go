@@ -617,7 +617,6 @@ func TestCheckUpdateTime(t *testing.T) {
 	if err != nil {
 		t.Error("parseUpdateTime function should not return error")
 	}
-	privateCache.updateCacheStatus()
 	assert.Equal(t, privateCache.cacheStatus, true)
 
 	// check if last update is more than 2 hrs
@@ -625,6 +624,5 @@ func TestCheckUpdateTime(t *testing.T) {
 	if err != nil {
 		t.Error("parseUpdateTime function should not return error")
 	}
-	privateCache.updateCacheStatus()
 	assert.Equal(t, privateCache.cacheStatus, false)
 }

@@ -355,10 +355,10 @@ func (c *Cache) parseUpdateTime(configmap interface{}) error {
 	// update last athenz contact time in the cache object
 	c.lock.Lock()
 	c.lastUpdate, err = time.Parse(time.RFC3339Nano, lastUpdateTime)
+	c.lock.Unlock()
 	if err != nil {
 		return fmt.Errorf("timestamp format in syncer config map is wrong")
 	}
-	c.lock.Unlock()
 	// update cache status boolean in the cache object
 	c.updateCacheStatus()
 	return nil
