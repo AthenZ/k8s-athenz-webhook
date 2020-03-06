@@ -359,20 +359,27 @@ func (c *Cache) parseUpdateTime(configmap interface{}) error {
 func (c *Cache) updateCacheStatus(timestamp string) error {
 	c.cmLock.Lock()
 	defer c.cmLock.Unlock()
-	var err error
+
 	if timestamp != "" {
-		c.lastUpdate, err = time.Parse(time.RFC3339Nano, timestamp)
+		formatTime, err := time.Parse(time.RFC3339Nano, timestamp)
 		if err != nil {
 			return fmt.Errorf("timestamp format in syncer config map is wrong")
 		}
+		c.lastUpdate = formatTime
 	}
 
 	t := time.Now()
 	t.Format(time.RFC3339Nano)
 	diff := t.Sub(c.lastUpdate)
 	if diff < c.maxContactTime {
+		if c.cacheStatus != CacheActive {
+			c.log.Println("cache status change: stale -> active")
+		}
 		c.cacheStatus = CacheActive
 		return nil
+	}
+	if c.cacheStatus != CacheStale {
+		c.log.Println("cache status change: active -> stale")
 	}
 	c.cacheStatus = CacheStale
 	return nil
