@@ -54,6 +54,7 @@ type Cache struct {
 	lastUpdate      time.Time
 	cacheStatus     bool
 	lock            sync.RWMutex
+	cmLock          sync.RWMutex
 	log             Logger
 	maxContactTime  time.Duration
 }
@@ -350,32 +351,29 @@ func (c *Cache) parseUpdateTime(configmap interface{}) error {
 	} else {
 		return fmt.Errorf("configmap format is wrong, it doesn't have a field called: %v", lastUpdateKeyField)
 	}
-	var err error
-
-	// update last athenz contact time in the cache object
-	c.lock.Lock()
-	c.lastUpdate, err = time.Parse(time.RFC3339Nano, lastUpdateTime)
-	c.lock.Unlock()
-	if err != nil {
-		return fmt.Errorf("timestamp format in syncer config map is wrong")
-	}
 	// update cache status boolean in the cache object
-	c.updateCacheStatus()
-	return nil
+	return c.updateCacheStatus(lastUpdateTime)
 }
 
 // updateCacheStatus - read lastUpdate variable, compare with current time and update on cache status
-func (c *Cache) updateCacheStatus() {
+func (c *Cache) updateCacheStatus(timestamp string) error {
+	c.cmLock.Lock()
+	defer c.cmLock.Unlock()
+	var err error
+	if timestamp != "" {
+		c.lastUpdate, err = time.Parse(time.RFC3339Nano, timestamp)
+		if err != nil {
+			return fmt.Errorf("timestamp format in syncer config map is wrong")
+		}
+	}
+
 	t := time.Now()
 	t.Format(time.RFC3339Nano)
 	diff := t.Sub(c.lastUpdate)
-	c.lock.Lock()
 	if diff < c.maxContactTime {
 		c.cacheStatus = CacheActive
-		c.lock.Unlock()
-		return
+		return nil
 	}
 	c.cacheStatus = CacheStale
-	c.lock.Unlock()
-	return
+	return nil
 }

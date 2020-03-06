@@ -4,7 +4,8 @@ import (
 	"time"
 )
 
-// Cron type for cron updates
+// Cron type for cache status updates, after a sync interval,
+// compare last update time stored in the cache and current time, update the cache status
 type Cron struct {
 	syncInterval time.Duration
 	log          Logger
@@ -20,7 +21,7 @@ func NewCron(syncInterval time.Duration, cache *Cache, log Logger) *Cron {
 	}
 }
 
-// CronSync - for every sync intercal, update the cache status to ensure it is up to date
+// CronSync - for every sync interval, update the cache status to ensure it is up to date
 func (c *Cron) CronSync(stopCh <-chan struct{}) {
 	for {
 		c.log.Println("Full Resync Cron Sleeping for ", c.syncInterval)
@@ -30,7 +31,7 @@ func (c *Cron) CronSync(stopCh <-chan struct{}) {
 			return
 		case <-time.After(c.syncInterval):
 			c.log.Println("CronSync starts to update cache status")
-			c.cache.updateCacheStatus()
+			c.cache.updateCacheStatus("")
 			return
 		}
 	}
