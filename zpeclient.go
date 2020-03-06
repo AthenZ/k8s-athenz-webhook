@@ -10,7 +10,14 @@ import (
 
 	"github.com/yahoo/athenz/clients/go/zms"
 	v1 "github.com/yahoo/k8s-athenz-syncer/pkg/apis/athenz/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
+)
+
+const (
+	lastUpdateKeyField = "latest_contact"
+	CacheActive        = true
+	CacheStale         = false
 )
 
 var (
@@ -43,18 +50,30 @@ type simpleAssertion struct {
 // Cache - cache for athenzdomains CR
 type Cache struct {
 	crIndexInformer cache.SharedIndexInformer
+	cmIndexInformer cache.SharedIndexInformer
 	domainMap       map[string]roleMappings
+	lastUpdate      time.Time
+	cacheStatus     bool
 	lock            sync.RWMutex
+	cmLock          sync.RWMutex
 	log             Logger
+	maxContactTime  time.Duration
 }
 
 // NewZpeClient - generate new athenzdomains cr cache
-func NewZpeClient(crIndexInformer cache.SharedIndexInformer, log Logger) *Cache {
+func NewZpeClient(crIndexInformer cache.SharedIndexInformer, cmIndexInformer cache.SharedIndexInformer, maxContactTime time.Duration, log Logger) *Cache {
 	domainMap := make(map[string]roleMappings)
+	var lastUpdate time.Time
+
 	privateCache := &Cache{
 		crIndexInformer: crIndexInformer,
-		domainMap:       domainMap,
-		log:             log,
+		cmIndexInformer: cmIndexInformer,
+		lastUpdate:      lastUpdate,
+		// initalize cache status to stale
+		cacheStatus:    CacheStale,
+		domainMap:      domainMap,
+		maxContactTime: maxContactTime,
+		log:            log,
 	}
 	crIndexInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
@@ -80,6 +99,22 @@ func NewZpeClient(crIndexInformer cache.SharedIndexInformer, log Logger) *Cache 
 				return
 			}
 			privateCache.deleteObj(item)
+		},
+	})
+	cmIndexInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			err := privateCache.parseUpdateTime(obj)
+			if err != nil {
+				log.Println("Unable to convert informer store item into ConfigMap type.")
+				return
+			}
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			err := privateCache.parseUpdateTime(newObj)
+			if err != nil {
+				log.Println("Unable to convert informer store item into ConfigMap type.")
+				return
+			}
 		},
 	})
 	return privateCache
@@ -322,4 +357,53 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 		}
 	}
 	return false, nil
+}
+
+// parseUpdateTime - read the last update time as string from configmap, store in the cache
+func (c *Cache) parseUpdateTime(configmap interface{}) error {
+	var lastUpdateTime string
+
+	obj, ok := configmap.(*corev1.ConfigMap)
+	if !ok {
+		return fmt.Errorf("Unable to cast interface to config map object")
+	}
+
+	// check if lastUpdateKeyField exists in the configmap
+	if _, ok = obj.Data[lastUpdateKeyField]; ok {
+		lastUpdateTime = strings.ReplaceAll(obj.Data[lastUpdateKeyField], `"`, "")
+	} else {
+		return fmt.Errorf("configmap format is wrong, it doesn't have a field called: %v", lastUpdateKeyField)
+	}
+	// update cache status boolean in the cache object
+	return c.updateCacheStatus(lastUpdateTime)
+}
+
+// updateCacheStatus - read lastUpdate variable, compare with current time and update on cache status
+func (c *Cache) updateCacheStatus(timestamp string) error {
+	c.cmLock.Lock()
+	defer c.cmLock.Unlock()
+
+	if timestamp != "" {
+		formatTime, err := time.Parse(time.RFC3339Nano, timestamp)
+		if err != nil {
+			return fmt.Errorf("timestamp format in syncer config map is wrong")
+		}
+		c.lastUpdate = formatTime
+	}
+
+	t := time.Now()
+	t.Format(time.RFC3339Nano)
+	diff := t.Sub(c.lastUpdate)
+	if diff < c.maxContactTime {
+		if c.cacheStatus != CacheActive {
+			c.log.Println("cache status change: stale -> active")
+		}
+		c.cacheStatus = CacheActive
+		return nil
+	}
+	if c.cacheStatus != CacheStale {
+		c.log.Println("cache status change: active -> stale")
+	}
+	c.cacheStatus = CacheStale
+	return nil
 }

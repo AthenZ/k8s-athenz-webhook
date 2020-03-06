@@ -184,9 +184,18 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 	var via string
 	var client *client
 	if a.AuthorizationConfig.Config.UseCache {
-		decision := a.useCacheEval(log, principal, checks)
-		if decision != nil && !a.AuthorizationConfig.Config.DryRun {
-			return decision
+		// check syncer's last contact time with athenz, if it is more than two hours,
+		// fall back to zms/zts.
+		a.AuthorizationConfig.Config.Cache.cmLock.RLock()
+		status := a.AuthorizationConfig.Config.Cache.cacheStatus
+		a.AuthorizationConfig.Config.Cache.cmLock.RUnlock()
+		if status {
+			decision := a.useCacheEval(log, principal, checks)
+			if decision != nil && !a.AuthorizationConfig.Config.DryRun {
+				return decision
+			}
+		} else {
+			log.Printf("Cache has not been updated for more than %v hours, last update time is: %v, failing back to zts/zms for authorization. ", a.AuthorizationConfig.Config.Cache.maxContactTime, a.AuthorizationConfig.Config.Cache.lastUpdate)
 		}
 	}
 	for _, check := range checks {
