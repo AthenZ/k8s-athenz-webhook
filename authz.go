@@ -183,6 +183,7 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 	internal := "internal setup error."
 	var via string
 	var client *client
+	var decision *grantStatus
 	if a.AuthorizationConfig.Config.UseCache {
 		// check syncer's last contact time with athenz, if it is more than two hours,
 		// fall back to zms/zts.
@@ -190,7 +191,7 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 		status := a.AuthorizationConfig.Config.Cache.cacheStatus
 		a.AuthorizationConfig.Config.Cache.cmLock.RUnlock()
 		if status {
-			decision := a.useCacheEval(log, principal, checks)
+			decision = a.useCacheEval(log, principal, checks)
 			if decision != nil && !a.AuthorizationConfig.Config.DryRun {
 				return decision
 			}
@@ -225,6 +226,20 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 			break
 		}
 	}
+
+	// if cache and dry run are enabled, error need to be added to log if authorize result from cache and authorize result from zts / zms are different.
+	if a.AuthorizationConfig.Config.UseCache {
+		// decision is nil, meaning it is not authorized through cache, but zts/zms authorized
+		if decision == nil && granted {
+			log.Printf("There is a mismatch between cache result and zms result. Cache granted: unauthorized, Athenz granted: authorized for principal: %s on check: %s", principal, via)
+		}
+
+		// decision is not empty, but result from zts/zms is not authorize
+		if decision != nil && decision.status.Allowed && !granted {
+			log.Printf("There is a mismatch between cache result and zms result. Athenz granted: unauthorized, Cache granted: authorized for principal: %s on check: %s", principal, decision.via)
+		}
+	}
+
 	if !granted {
 		var list []string
 		for _, c := range checks {
