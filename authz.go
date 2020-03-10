@@ -231,12 +231,12 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 	if a.AuthorizationConfig.Config.UseCache {
 		// decision is nil, meaning it is not authorized through cache, but zts/zms authorized
 		if decision == nil && granted {
-			log.Printf("There is a mismatch between cache result and zms result. Cache granted: unauthorized, Athenz granted: authorized for principal: %s on check: %s", principal, via)
+			log.Printf("There is a mismatch between cache result and zms result. Cache granted: false, Athenz granted: true for user: %s on check: %s", principal, via)
 		}
 
 		// decision is not empty, but result from zts/zms is not authorize
 		if decision != nil && decision.status.Allowed && !granted {
-			log.Printf("There is a mismatch between cache result and zms result. Athenz granted: unauthorized, Cache granted: authorized for principal: %s on check: %s", principal, decision.via)
+			log.Printf("There is a mismatch between cache result and zms result. Cache granted: true, Athenz granted: false for user: %s on check: %s", principal, decision.via)
 		}
 	}
 
