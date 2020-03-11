@@ -487,7 +487,10 @@ func TestUseCacheEval(t *testing.T) {
 			Action:   "get",
 		},
 	}
-	res := az.useCacheEval(log, "user.name", checks)
+	res, err := az.useCacheEval(log, "user.name", checks)
+	if err != nil {
+		t.Error("Should not have error")
+	}
 	if res == nil {
 		t.Error("Should return grantStatus true")
 	}
