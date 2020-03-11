@@ -239,7 +239,8 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 	}
 
 	// if cache and dry run are enabled, error need to be added to log if authorize result from cache and authorize result from zts / zms are different.
-	if a.AuthorizationConfig.Config.UseCache {
+	// skip the check if decision is nil, decision will be nil if cache is out of sync with athenz
+	if a.AuthorizationConfig.Config.UseCache && decision != nil {
 		if decision.status.Allowed != granted {
 			var viaCheck string
 			if decision.via != "" {
