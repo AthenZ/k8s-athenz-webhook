@@ -122,14 +122,16 @@ type grantStatus struct {
 }
 
 // useCacheEval - authorize using cache
-func (a *authorizer) useCacheEval(log Logger, principal string, checks []AthenzAccessCheck) *grantStatus {
+func (a *authorizer) useCacheEval(log Logger, principal string, checks []AthenzAccessCheck) (*grantStatus, error) {
 	var via string
 	var decision bool
 	var err error
+	var errstrings []string
+	var aggrError error
 	for _, check := range checks {
 		decision, err = a.AuthorizationConfig.Config.Cache.authorize(principal, check)
 		if err != nil {
-			log.Println("Error happened using cache to evaluate authorization decision", err)
+			errstrings = append(errstrings, fmt.Errorf("Error happened using cache to evaluate authorization decision: %s", err).Error())
 			continue
 		}
 		if decision {
@@ -138,15 +140,23 @@ func (a *authorizer) useCacheEval(log Logger, principal string, checks []AthenzA
 		}
 	}
 	log.Println("Authorization decision using cache (true=authorized, false=not authorized): ", decision)
+	if len(errstrings) > 0 {
+		aggrError = fmt.Errorf(strings.Join(errstrings, "\n"))
+	}
 	if decision {
 		return &grantStatus{
 			status: authz.SubjectAccessReviewStatus{
 				Allowed: true,
 			},
 			via: via,
-		}
+		}, aggrError
 	}
-	return nil
+	return &grantStatus{
+		status: authz.SubjectAccessReviewStatus{
+			Allowed: false,
+		},
+		via: via,
+	}, aggrError
 }
 
 func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReviewSpec) *grantStatus {
@@ -183,6 +193,8 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 	internal := "internal setup error."
 	var via string
 	var client *client
+	var decision *grantStatus
+	var cacheEvalError error
 	if a.AuthorizationConfig.Config.UseCache {
 		// check syncer's last contact time with athenz, if it is more than two hours,
 		// fall back to zms/zts.
@@ -190,8 +202,8 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 		status := a.AuthorizationConfig.Config.Cache.cacheStatus
 		a.AuthorizationConfig.Config.Cache.cmLock.RUnlock()
 		if status {
-			decision := a.useCacheEval(log, principal, checks)
-			if decision != nil && !a.AuthorizationConfig.Config.DryRun {
+			decision, cacheEvalError = a.useCacheEval(log, principal, checks)
+			if decision.status.Allowed == true && !a.AuthorizationConfig.Config.DryRun {
 				return decision
 			}
 		} else {
@@ -225,6 +237,24 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 			break
 		}
 	}
+
+	// if cache and dry run are enabled, error need to be added to log if authorize result from cache and authorize result from zts / zms are different.
+	// skip the check if decision is nil, decision will be nil if cache is out of sync with athenz
+	if a.AuthorizationConfig.Config.UseCache && decision != nil {
+		if decision.status.Allowed != granted {
+			var viaCheck string
+			if decision.via != "" {
+				viaCheck = decision.via
+			} else {
+				viaCheck = via
+			}
+			log.Printf("There is a mismatch between cache result and zms result. Cache granted: %t, Athenz granted: %t for user: %s on check: %s", decision.status.Allowed, granted, principal, viaCheck)
+			if cacheEvalError != nil {
+				log.Printf("Error when using cache to authorize: %s", cacheEvalError)
+			}
+		}
+	}
+
 	if !granted {
 		var list []string
 		for _, c := range checks {
