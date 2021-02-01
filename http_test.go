@@ -232,3 +232,35 @@ func TestHTTPWriteBadJSON(t *testing.T) {
 		t.Errorf("bad external message want '%q' got '%q", es, body.String())
 	}
 }
+
+func TestWriteJSONWithContextDone(t *testing.T) {
+	l := newlp()
+	config := Config{
+		LogProvider: func(id string) Logger {
+			l.id = id
+			return l
+		},
+	}
+	r := httptest.NewRequest("GET", "/foo", nil)
+	r2 := requestWithContext(r, config)
+
+	n := &node{}
+	var body bytes.Buffer
+	w := httptest.NewRecorder()
+	w.Body = &body
+	writeJSON(r2.Context(), w, n)
+
+	es := l.b.String()
+	for _, e := range []string{"internal serialization error", "FOOBAR"} {
+		if !strings.Contains(es, e) {
+			t.Errorf("Error string '%s' did not contain '%s'", es, e)
+		}
+	}
+	if w.Code != 500 {
+		t.Errorf("500 error was not set")
+	}
+	es = "internal serialization error\n"
+	if body.String() != es {
+		t.Errorf("bad external message want '%q' got '%q", es, body.String())
+	}
+}
