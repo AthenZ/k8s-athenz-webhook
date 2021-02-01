@@ -125,28 +125,34 @@ func (a *authenticator) logOutcome(ctx context.Context, nt *ntoken, remoteAddr s
 
 func (a *authenticator) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	l := getLogger(ctx)
 
-	tr, err := a.getTokenReview(ctx, r)
-	if err != nil {
-		l.Printf("authn request error from %s: %v\n", r.RemoteAddr, err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	select {
+	case <-ctx.Done():
 		return
-	}
+	default:
+		l := getLogger(ctx)
 
-	nt, err := a.getNToken(tr.Spec.Token)
-	var ts *authn.TokenReviewStatus
-	if err != nil {
-		ts = a.deny(err)
-	} else {
-		ts = a.authenticate(r.Context(), nt)
-	}
+		tr, err := a.getTokenReview(ctx, r)
+		if err != nil {
+			l.Printf("authn request error from %s: %v\n", r.RemoteAddr, err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-	a.logOutcome(ctx, nt, r.RemoteAddr, ts)
-	resp := struct {
-		APIVersion string                   `json:"apiVersion"`
-		Kind       string                   `json:"kind"`
-		Status     *authn.TokenReviewStatus `json:"status"`
-	}{tr.APIVersion, tr.Kind, ts}
-	writeJSON(ctx, w, &resp)
+		nt, err := a.getNToken(tr.Spec.Token)
+		var ts *authn.TokenReviewStatus
+		if err != nil {
+			ts = a.deny(err)
+		} else {
+			ts = a.authenticate(r.Context(), nt)
+		}
+
+		a.logOutcome(ctx, nt, r.RemoteAddr, ts)
+		resp := struct {
+			APIVersion string                   `json:"apiVersion"`
+			Kind       string                   `json:"kind"`
+			Status     *authn.TokenReviewStatus `json:"status"`
+		}{tr.APIVersion, tr.Kind, ts}
+		writeJSON(ctx, w, &resp)
+	}
 }
