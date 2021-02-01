@@ -244,23 +244,24 @@ func TestWriteJSONWithContextDone(t *testing.T) {
 	r := httptest.NewRequest("GET", "/foo", nil)
 	r2 := requestWithContext(r, config)
 
+	cc, cancel := context.WithCancel(r2.Context())
+	cancel()
+
 	n := &node{}
 	var body bytes.Buffer
 	w := httptest.NewRecorder()
 	w.Body = &body
-	writeJSON(r2.Context(), w, n)
+	writeJSON(cc, w, n)
 
 	es := l.b.String()
-	for _, e := range []string{"internal serialization error", "FOOBAR"} {
-		if !strings.Contains(es, e) {
-			t.Errorf("Error string '%s' did not contain '%s'", es, e)
-		}
+	if es != "" {
+		t.Errorf("logger buffer is not empty, buffer: '%s'", es)
 	}
-	if w.Code != 500 {
-		t.Errorf("500 error was not set")
+	if w.Code != 200 {
+		t.Errorf("default 200 was not set")
 	}
-	es = "internal serialization error\n"
-	if body.String() != es {
-		t.Errorf("bad external message want '%q' got '%q", es, body.String())
+	bs := body.String()
+	if bs != "" {
+		t.Errorf("response body is not empty, buffer: '%s'", bs)
 	}
 }
