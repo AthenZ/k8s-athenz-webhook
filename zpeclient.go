@@ -36,8 +36,9 @@ type roleMappings struct {
 
 // simplePrincipal - principal data
 type simplePrincipal struct {
-	memberRegex *regexp.Regexp
-	expiration  time.Time
+	memberRegex    *regexp.Regexp
+	expiration     time.Time
+	systemDisabled bool
 }
 
 // simpleAssertion - processed policy
@@ -175,6 +176,9 @@ func (c *Cache) parseData(item *v1.AthenzDomain) (roleMappings, error) {
 				principalData.expiration = time.Time{}
 			} else {
 				principalData.expiration = roleMember.Expiration.Time
+			}
+			if roleMember.SystemDisabled != nil && *roleMember.SystemDisabled != 0 {
+				principalData.systemDisabled = true
 			}
 			_, ok := crMap.roleToPrincipals[roleName]
 			if !ok {
@@ -328,7 +332,7 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 	for role, members := range domainData.roleToPrincipals {
 		for _, member := range members {
 			if member.memberRegex.MatchString(principal) {
-				if member.expiration.IsZero() || member.expiration.After(time.Now()) {
+				if member.expiration.IsZero() || member.expiration.After(time.Now()) && !member.systemDisabled {
 					roles = append(roles, role)
 				}
 			}
