@@ -332,8 +332,9 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 	for role, members := range domainData.roleToPrincipals {
 		for _, member := range members {
 			if member.memberRegex.MatchString(principal) {
-				if member.expiration.IsZero() || member.expiration.After(time.Now()) && !member.systemDisabled {
+				if (member.expiration.IsZero() || member.expiration.After(time.Now())) && !member.systemDisabled {
 					roles = append(roles, role)
+					break
 				}
 			}
 		}
@@ -342,8 +343,7 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 
 	for _, role := range roles {
 		// check if role exists in deny assertion mapping, if exists, deny the check immediately.
-		if _, ok := domainData.roleToDenyAssertion[role]; ok {
-			policies := domainData.roleToDenyAssertion[role]
+		if policies, ok := domainData.roleToDenyAssertion[role]; ok {
 			for _, assert := range policies {
 				if assert.resource.MatchString(check.Resource) && assert.action.MatchString(check.Action) {
 					c.log.Printf("Access denied: assertion has an explict DENY for resource %s and action %s", check.Resource, check.Action)
