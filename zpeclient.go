@@ -334,7 +334,6 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 			if member.memberRegex.MatchString(principal) {
 				if (member.expiration.IsZero() || member.expiration.After(time.Now())) && !member.systemDisabled {
 					roles = append(roles, role)
-					break
 				}
 			}
 		}
