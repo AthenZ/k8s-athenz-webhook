@@ -240,7 +240,7 @@ func getFakeAthenzDomainWithExplicitDeny() *v1.AthenzDomain {
 	}
 	item := &v1.AthenzDomain{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: trustDomainName,
+			Name: domainWithDeny,
 		},
 		Spec: spec,
 	}
@@ -713,12 +713,12 @@ func TestAuthorize(t *testing.T) {
 	// expired membership
 	check = AthenzAccessCheck{
 		Action:   "get",
-		Resource: "home.domain:pods",
+		Resource: "home.domain.deny:pods",
 	}
 	item.Spec.Domain.Roles = []*zms.Role{
 		{
 			Members: []zms.MemberName{zms.MemberName(username)},
-			Name:    zms.ResourceName(domainName + ":role.admin"),
+			Name:    zms.ResourceName(domainWithDeny + ":role.admin"),
 			RoleMembers: []*zms.RoleMember{
 				{
 					MemberName: zms.MemberName(username + "1"),
@@ -736,6 +736,36 @@ func TestAuthorize(t *testing.T) {
 	}
 	if res {
 		t.Error("Wrong authorization result. Membership has expired")
+	}
+
+	// disabled role principal
+	systemDisabled := int32(1)
+	check = AthenzAccessCheck{
+		Action:   "get",
+		Resource: "home.domain.deny:pods",
+	}
+	item.Spec.SignedDomain.Domain.Roles = []*zms.Role{
+		{
+			Members: []zms.MemberName{zms.MemberName(username + "2")},
+			Name:    zms.ResourceName(domainWithDeny + ":role.admin"),
+			RoleMembers: []*zms.RoleMember{
+				{
+					MemberName: zms.MemberName(username + "2"),
+					Expiration: &rdl.Timestamp{
+						Time: time.Now().Add(time.Duration(6) * time.Hour),
+					},
+					SystemDisabled: &systemDisabled,
+				},
+			},
+		},
+	}
+	privateCache.addOrUpdateObj(item)
+	res, err = privateCache.authorize(username+"2", check)
+	if err != nil {
+		t.Error(err)
+	}
+	if res {
+		t.Error("Wrong authorization result. Member has been disabled by system.")
 	}
 }
 

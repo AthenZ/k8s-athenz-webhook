@@ -36,8 +36,9 @@ type roleMappings struct {
 
 // simplePrincipal - principal data
 type simplePrincipal struct {
-	memberRegex *regexp.Regexp
-	expiration  time.Time
+	memberRegex    *regexp.Regexp
+	expiration     time.Time
+	systemDisabled bool
 }
 
 // simpleAssertion - processed policy
@@ -175,6 +176,9 @@ func (c *Cache) parseData(item *v1.AthenzDomain) (roleMappings, error) {
 				principalData.expiration = time.Time{}
 			} else {
 				principalData.expiration = roleMember.Expiration.Time
+			}
+			if roleMember.SystemDisabled != nil && *roleMember.SystemDisabled != 0 {
+				principalData.systemDisabled = true
 			}
 			_, ok := crMap.roleToPrincipals[roleName]
 			if !ok {
@@ -328,7 +332,7 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 	for role, members := range domainData.roleToPrincipals {
 		for _, member := range members {
 			if member.memberRegex.MatchString(principal) {
-				if member.expiration.IsZero() || member.expiration.After(time.Now()) {
+				if (member.expiration.IsZero() || member.expiration.After(time.Now())) && !member.systemDisabled {
 					roles = append(roles, role)
 				}
 			}
@@ -338,8 +342,7 @@ func (c *Cache) authorize(principal string, check AthenzAccessCheck) (bool, erro
 
 	for _, role := range roles {
 		// check if role exists in deny assertion mapping, if exists, deny the check immediately.
-		if _, ok := domainData.roleToDenyAssertion[role]; ok {
-			policies := domainData.roleToDenyAssertion[role]
+		if policies, ok := domainData.roleToDenyAssertion[role]; ok {
 			for _, assert := range policies {
 				if assert.resource.MatchString(check.Resource) && assert.action.MatchString(check.Action) {
 					c.log.Printf("Access denied: assertion has an explict DENY for resource %s and action %s", check.Resource, check.Action)
