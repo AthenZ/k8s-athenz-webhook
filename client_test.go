@@ -240,7 +240,7 @@ func TestClientTimeout(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error got success")
 		}
-		if !strings.Contains(err.Error(), "request canceled") {
+		if !strings.Contains(err.Error(), "Client.Timeout exceeded") {
 			t.Fatal("invalid error", err)
 		}
 	})
