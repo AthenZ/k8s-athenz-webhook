@@ -41,10 +41,10 @@ func (a *AuthzError) Reason() string {
 }
 
 type authorizer struct {
-	AuthorizationConfig
+	*AuthorizationConfig
 }
 
-func newAuthz(c AuthorizationConfig) *authorizer {
+func newAuthz(c *AuthorizationConfig) *authorizer {
 	return &authorizer{
 		AuthorizationConfig: c,
 	}

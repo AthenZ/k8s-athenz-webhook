@@ -42,7 +42,7 @@ type logDet struct {
 	flags LogFlags
 }
 
-func requestWithContext(r *http.Request, config Config) *http.Request {
+func requestWithContext(r *http.Request, config *Config) *http.Request {
 	l := config.LogProvider(newReqID())
 	c := context.WithValue(r.Context(), logKey, &logDet{
 		log:   l,
@@ -67,7 +67,7 @@ func getLogger(ctx context.Context) Logger {
 	return log.New(os.Stderr, "", log.LstdFlags)
 }
 
-func wrapHandler(delegate http.Handler, config Config) http.Handler {
+func wrapHandler(delegate http.Handler, config *Config) http.Handler {
 	dumpRequest := func(l Logger, r *http.Request) {
 		l.Println("server request from", r.RemoteAddr, r.Method, r.URL)
 		for k, v := range r.Header {

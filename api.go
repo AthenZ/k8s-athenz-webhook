@@ -121,13 +121,13 @@ func (c *Config) initDefaults() {
 
 // AuthenticationConfig is the authentication configuration
 type AuthenticationConfig struct {
-	Config            // base config
+	*Config            // base config
 	Mapper UserMapper // user mapper
 }
 
 // AuthorizationConfig is the authorization configuration
 type AuthorizationConfig struct {
-	Config                                       // the base config
+	*Config                                       // the base config
 	HelpMessage               string             // additional message for the user on internal authz errors
 	Token                     IdentityToken      // the token provider for calls to Athenz
 	AthenzX509                IdentityAthenzX509 // the x509 provider for calls to Athenz
@@ -136,7 +136,7 @@ type AuthorizationConfig struct {
 }
 
 // NewAuthenticator returns a handler that can service an authentication request.
-func NewAuthenticator(c AuthenticationConfig) http.Handler {
+func NewAuthenticator(c *AuthenticationConfig) http.Handler {
 	if c.Mapper == nil {
 		panic("no user mapper in authenticator config")
 	}
@@ -145,7 +145,7 @@ func NewAuthenticator(c AuthenticationConfig) http.Handler {
 }
 
 // NewAuthorizer returns a handler that can service an authorization request.
-func NewAuthorizer(c AuthorizationConfig) http.Handler {
+func NewAuthorizer(c *AuthorizationConfig) http.Handler {
 	if c.Mapper == nil {
 		panic("no resource mapper in authorizer config")
 	}
