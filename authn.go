@@ -17,10 +17,10 @@ const (
 )
 
 type authenticator struct {
-	*AuthenticationConfig
+	AuthenticationConfig
 }
 
-func newAuthn(c *AuthenticationConfig) *authenticator {
+func newAuthn(c AuthenticationConfig) *authenticator {
 	return &authenticator{
 		AuthenticationConfig: c,
 	}
