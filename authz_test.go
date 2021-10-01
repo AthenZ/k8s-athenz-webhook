@@ -377,12 +377,10 @@ func TestAuthzAthenz404(t *testing.T) {
 		t.Fatal("invalid status code", w.Result().StatusCode)
 	}
 	tr := checkGrant(t, body.Bytes(), false)
-	reason := "Athenz domain error."
+	reason := ""
 	if tr.Status.Reason != reason {
 		t.Errorf("reason mismatch: want '%s', got'%s'", reason, tr.Status.Reason)
 	}
-	s.containsLog("domain related error for frob-athenz on my.domain:knob")
-	s.containsLog("returned 404")
 }
 
 func TestAuthzAthenz500(t *testing.T) {
