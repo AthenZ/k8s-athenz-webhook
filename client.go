@@ -170,7 +170,7 @@ func (c *client) authorize(ctx context.Context, principal string, check AthenzAc
 		authzResponse.Granted = false
 		if err, ok := err.(*statusCodeError); ok {
 			if err.code == http.StatusNotFound {
-				return false, err
+				return false, nil
 			}
 		}
 
