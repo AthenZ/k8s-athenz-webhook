@@ -377,10 +377,12 @@ func TestAuthzAthenz400(t *testing.T) {
 		t.Fatal("invalid status code", w.Result().StatusCode)
 	}
 	tr := checkGrant(t, body.Bytes(), false)
-	if tr.Status.Reason != helpText {
-		t.Errorf("reason mismatch: want '%s', got'%s'", helpText, tr.Status.Reason)
+	reason := "Invalid ResourceName error."
+	if tr.Status.Reason != reason {
+		t.Errorf("reason mismatch: want '%s', got'%s'", reason, tr.Status.Reason)
 	}
 	s.containsLog("returned 400")
+	s.containsLog("authz denied bob: get on foo-bar:baz:: -> error:resource related error for frob-athenz on my.domain:knob")
 }
 
 func TestAuthzAthenz404(t *testing.T) {

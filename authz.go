@@ -224,6 +224,8 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 			switch e := err.(type) {
 			case *statusCodeError:
 				switch e.code {
+				case http.StatusBadRequest: // ResourceException. Not supported resource name
+					return deny(NewAuthzError(fmt.Errorf("resource related error for %v, %v", check, err), fmt.Sprintf("Invalid ResourceName error.")), false)
 				case http.StatusUnauthorized: // internal identity token was borked
 					return deny(NewAuthzError(err, internal), true)
 				case http.StatusNotFound: // domain setup error
