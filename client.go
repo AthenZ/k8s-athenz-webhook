@@ -169,8 +169,11 @@ func (c *client) authorize(ctx context.Context, principal string, check AthenzAc
 	if err != nil {
 		authzResponse.Granted = false
 		if err, ok := err.(*statusCodeError); ok {
-			if err.code == http.StatusNotFound {
+			switch err.code {
+			case http.StatusBadRequest:
 				return false, err
+			case http.StatusNotFound:
+				return false, nil
 			}
 		}
 

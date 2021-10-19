@@ -363,6 +363,28 @@ func TestAuthzBadToken(t *testing.T) {
 	s.containsLog("returned 401")
 }
 
+func TestAuthzAthenz400(t *testing.T) {
+	s := newAuthzScaffold(t)
+	defer s.Close()
+	input := stdAuthzInput()
+	ar := runAuthzTest(s, serialize(input), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(400)
+	}))
+	w := ar.w
+	body := ar.body
+
+	if w.Result().StatusCode != 200 {
+		t.Fatal("invalid status code", w.Result().StatusCode)
+	}
+	tr := checkGrant(t, body.Bytes(), false)
+	reason := "Invalid ResourceName error."
+	if tr.Status.Reason != reason {
+		t.Errorf("reason mismatch: want '%s', got'%s'", reason, tr.Status.Reason)
+	}
+	s.containsLog("returned 400")
+	s.containsLog("authz denied bob: get on foo-bar:baz:: -> error:resource related error for frob-athenz on my.domain:knob")
+}
+
 func TestAuthzAthenz404(t *testing.T) {
 	s := newAuthzScaffold(t)
 	defer s.Close()
@@ -377,12 +399,11 @@ func TestAuthzAthenz404(t *testing.T) {
 		t.Fatal("invalid status code", w.Result().StatusCode)
 	}
 	tr := checkGrant(t, body.Bytes(), false)
-	reason := "Athenz domain error."
+	reason := "" // Continue to the the next check
 	if tr.Status.Reason != reason {
 		t.Errorf("reason mismatch: want '%s', got'%s'", reason, tr.Status.Reason)
 	}
-	s.containsLog("domain related error for frob-athenz on my.domain:knob")
-	s.containsLog("returned 404")
+	s.containsLog("authz denied bob: get on foo-bar:baz:: -> error:principal std.principal does not have access to any of 'frob-athenz on my.domain:knob' resources")
 }
 
 func TestAuthzAthenz500(t *testing.T) {
