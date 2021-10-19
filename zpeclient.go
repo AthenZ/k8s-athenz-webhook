@@ -415,9 +415,9 @@ func (c *Cache) updateCacheStatus(timestamp string) error {
 
 // SetCacheEnabledStatus - sets cacheEnabled value
 // when cacheEnabled is set to true, cache will be used in the request flow.
-func (c *Cache) SetCacheEnabledStatus(status bool) {
-	c.log.Printf("set cache enabled status to %t \n", status)
+func (c *Cache) SetCacheEnabledStatus(enabled bool) {
+	c.log.Printf("set cache enabled status to %t \n", enabled)
 	c.cmLock.Lock()
 	defer c.cmLock.Unlock()
-	c.cacheEnabled = status
+	c.cacheEnabled = enabled
 }
