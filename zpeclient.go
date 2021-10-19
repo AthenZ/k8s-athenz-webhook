@@ -413,16 +413,9 @@ func (c *Cache) updateCacheStatus(timestamp string) error {
 	return nil
 }
 
-// setCacheEnabled - sets that the cache is enabled
-func (c *Cache) SetCacheEnabled() {
+// SetCacheEnabledStatus - sets cacheEnabled value
+func (c *Cache) SetCacheEnabledStatus(status  bool) {
 	c.cmLock.Lock()
 	defer c.cmLock.Unlock()
-	c.cacheEnabled = true
-}
-
-// SetCacheDisabled - sets that the cache is not ready to be used yet
-func (c *Cache) SetCacheDisabled() {
-	c.cmLock.Lock()
-	defer c.cmLock.Unlock()
-	c.cacheEnabled = false
+	c.cacheEnabled = status
 }
