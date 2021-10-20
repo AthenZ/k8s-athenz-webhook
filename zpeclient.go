@@ -59,6 +59,7 @@ type Cache struct {
 	cmLock          sync.RWMutex
 	log             Logger
 	maxContactTime  time.Duration
+	cacheEnabled    bool
 }
 
 // NewZpeClient - generate new athenzdomains cr cache
@@ -75,6 +76,7 @@ func NewZpeClient(crIndexInformer cache.SharedIndexInformer, cmIndexInformer cac
 		domainMap:      domainMap,
 		maxContactTime: maxContactTime,
 		log:            log,
+		cacheEnabled:   false,
 	}
 	crIndexInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
@@ -409,4 +411,13 @@ func (c *Cache) updateCacheStatus(timestamp string) error {
 	}
 	c.cacheStatus = CacheStale
 	return nil
+}
+
+// SetCacheEnabledStatus - sets cacheEnabled value
+// when cacheEnabled is set to true, cache will be used in the request flow.
+func (c *Cache) SetCacheEnabledStatus(enabled bool) {
+	c.log.Printf("set cache enabled status to %t \n", enabled)
+	c.cmLock.Lock()
+	defer c.cmLock.Unlock()
+	c.cacheEnabled = enabled
 }

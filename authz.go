@@ -199,7 +199,7 @@ func (a *authorizer) authorize(ctx context.Context, sr authz.SubjectAccessReview
 		// check syncer's last contact time with athenz, if it is more than two hours,
 		// fall back to zms/zts.
 		a.AuthorizationConfig.Config.Cache.cmLock.RLock()
-		status := a.AuthorizationConfig.Config.Cache.cacheStatus
+		status := a.AuthorizationConfig.Config.Cache.cacheStatus && a.AuthorizationConfig.Config.Cache.cacheEnabled
 		a.AuthorizationConfig.Config.Cache.cmLock.RUnlock()
 		if status {
 			decision, cacheEvalError = a.useCacheEval(log, principal, checks)
