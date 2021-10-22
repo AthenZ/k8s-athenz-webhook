@@ -425,7 +425,7 @@ func TestRunWithMockZMS(t *testing.T) {
 	tr := authn.TokenReview{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "TokenReview",
-			APIVersion: "authentication.k8s.io/v1beta1",
+			APIVersion: "authentication.k8s.io/v1",
 		},
 		Spec: authn.TokenReviewSpec{
 			Token: getToken(t),
@@ -434,7 +434,7 @@ func TestRunWithMockZMS(t *testing.T) {
 	sar := authz.SubjectAccessReview{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "SubjectAccessReview",
-			APIVersion: "authorization.k8s.io/v1beta1",
+			APIVersion: "authorization.k8s.io/v1",
 		},
 		Spec: authz.SubjectAccessReviewSpec{
 			User: "bob",

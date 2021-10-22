@@ -285,7 +285,7 @@ func TestAuthnBadInputs(t *testing.T) {
 	}{
 		{400, nil, "empty body for authentication request"},
 		{400, badKind(), "unsupported authentication kind, want 'TokenReview', got 'foo'"},
-		{400, badVersion(), "unsupported authentication version, want 'authentication.k8s.io/v1beta1', got 'foo'"},
+		{400, badVersion(), "unsupported authentication version, want 'authentication.k8s.io/v1', got 'foo'"},
 		{400, noToken(), "empty authentication token spec. Must set a token value"},
 		{400, append(serialize(base), 'X'), "invalid JSON request"},
 		{200, badToken(), "bad field in token 'garbage'"},

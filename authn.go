@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	authnSupportedVersion = "authentication.k8s.io/v1beta1"
+	authnSupportedVersion = "authentication.k8s.io/v1"
 	authnSupportedKind    = "TokenReview"
 )
 

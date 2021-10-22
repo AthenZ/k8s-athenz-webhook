@@ -7,7 +7,7 @@ require (
 	github.com/stretchr/testify v1.5.1
 	github.com/yahoo/athenz v1.9.31
 	github.com/yahoo/k8s-athenz-syncer v0.1.7
-	k8s.io/api v0.17.14
-	k8s.io/apimachinery v0.17.14
-	k8s.io/client-go v0.17.14
+	k8s.io/api v0.19.15
+	k8s.io/apimachinery v0.19.15
+	k8s.io/client-go v0.19.15
 )
