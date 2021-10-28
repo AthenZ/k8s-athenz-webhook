@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	authzSupportedVersion = "authorization.k8s.io/v1beta1"
+	authzSupportedVersion = "authorization.k8s.io/v1"
 	authzSupportedKind    = "SubjectAccessReview"
 )
 

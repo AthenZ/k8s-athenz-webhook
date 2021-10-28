@@ -471,7 +471,7 @@ func TestAuthzBadInputs(t *testing.T) {
 	}{
 		{400, nil, "empty body for authorization request"},
 		{400, badKind(), "unsupported authorization kind, want 'SubjectAccessReview', got 'foo'"},
-		{400, badVersion(), "unsupported authorization version, want 'authorization.k8s.io/v1beta1', got 'foo'"},
+		{400, badVersion(), "unsupported authorization version, want 'authorization.k8s.io/v1', got 'foo'"},
 		{400, emptyStruct(), "bad authorization spec, must have one of resource or non-resource attributes"},
 		{400, append(serialize(base), 'X'), "invalid JSON request"},
 	}
