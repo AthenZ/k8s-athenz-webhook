@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	authz "k8s.io/api/authorization/v1beta1"
+	authz "k8s.io/api/authorization/v1"
 )
 
 const (

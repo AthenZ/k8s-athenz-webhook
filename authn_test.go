@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	authn "k8s.io/api/authentication/v1beta1"
+	authn "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/stretchr/testify/require"

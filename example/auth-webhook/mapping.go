@@ -11,8 +11,8 @@ import (
 	"time"
 
 	api "github.com/yahoo/k8s-athenz-webhook"
-	authn "k8s.io/api/authentication/v1beta1"
-	authz "k8s.io/api/authorization/v1beta1"
+	authn "k8s.io/api/authentication/v1"
+	authz "k8s.io/api/authorization/v1"
 )
 
 // this file contains implementations for the user mapper,
@@ -66,7 +66,6 @@ func isSystemNamespace(ns string) bool {
 //
 // - for read access, adds a secondary auth checks for cluster admin access so that these roles
 // have full read access on all resources in all namespaces.
-//
 type ResourceMapper struct {
 	AdminDomain    string   // the admin domain to use for system resources
 	AdminResources []string // namespaced resourced that should be treated as system resources for write
@@ -92,7 +91,6 @@ func RestoreDomainName(ns string) string {
 // under the admin domain.
 //
 // - all other namespaces are returned as is, modified for k8s to Athenz differences.
-//
 func (d *ResourceMapper) DomainFromNamespace(ns string) string {
 	if ns == "" {
 		return d.AdminDomain
@@ -108,7 +106,6 @@ func (d *ResourceMapper) DomainFromNamespace(ns string) string {
 // - service accounts are turned into Athenz services in the mapped domain of the service account namespace.
 //
 // - Non-service accounts are returned unmodified
-//
 func (d *ResourceMapper) PrincipalFromUser(user string) string {
 	if strings.HasPrefix(user, serviceAccountPrefix) {
 		u := strings.TrimPrefix(user, serviceAccountPrefix)
