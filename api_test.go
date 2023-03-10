@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	authn "k8s.io/api/authentication/v1beta1"
-	authz "k8s.io/api/authorization/v1beta1"
+	authn "k8s.io/api/authentication/v1"
+	authz "k8s.io/api/authorization/v1"
 )
 
 func TestAPIAccessCheckString(t *testing.T) {

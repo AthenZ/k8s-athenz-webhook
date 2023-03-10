@@ -11,8 +11,8 @@ import (
 	"os"
 	"time"
 
-	authn "k8s.io/api/authentication/v1beta1"
-	authz "k8s.io/api/authorization/v1beta1"
+	authn "k8s.io/api/authentication/v1"
+	authz "k8s.io/api/authorization/v1"
 
 	"github.com/yahoo/athenz/libs/go/zmssvctoken"
 )

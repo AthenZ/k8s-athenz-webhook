@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	authn "k8s.io/api/authentication/v1beta1"
+	authn "k8s.io/api/authentication/v1"
 )
 
 const (
