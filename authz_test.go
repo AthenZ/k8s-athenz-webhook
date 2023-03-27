@@ -134,7 +134,7 @@ type authzTestResult struct {
 	body *bytes.Buffer
 }
 
-func runAuthzTest(s *authzScaffold, input []byte, handler http.Handler) *authzTestResult {
+func runAuthzTest(s *authzScaffold, input []byte, handler http.Handler, c context.Context) *authzTestResult {
 	s.resetLog()
 	az := NewAuthorizer(s.config)
 	w := httptest.NewRecorder()
@@ -142,6 +142,9 @@ func runAuthzTest(s *authzScaffold, input []byte, handler http.Handler) *authzTe
 	w.Body = &respBody
 	r := httptest.NewRequest("POST", "/authz", bytes.NewBuffer(input))
 	s.h = handler
+	if c != nil {
+		r = r.WithContext(c)
+	}
 	az.ServeHTTP(w, r)
 	return &authzTestResult{
 		w:    w,
@@ -174,7 +177,7 @@ func TestAuthzHappyPath(t *testing.T) {
 		writeJSON(testContext, w, grant)
 	})
 	input := stdAuthzInput()
-	ar := runAuthzTest(s, serialize(input), zmsHandler)
+	ar := runAuthzTest(s, serialize(input), zmsHandler, nil)
 	w := ar.w
 	body := ar.body
 
@@ -211,7 +214,7 @@ func TestAuthzHappyPathX509(t *testing.T) {
 		writeJSON(testContext, w, grant)
 	})
 	input := stdAuthzInput()
-	ar := runAuthzTest(s, serialize(input), zmsHandler)
+	ar := runAuthzTest(s, serialize(input), zmsHandler, nil)
 	w := ar.w
 	body := ar.body
 	if w.Result().StatusCode != 200 {
@@ -250,7 +253,7 @@ func TestAuthzZMSReject(t *testing.T) {
 				writeJSON(testContext, w, grant)
 			})
 			input := stdAuthzInput()
-			ar := runAuthzTest(s, serialize(input), zmsHandler)
+			ar := runAuthzTest(s, serialize(input), zmsHandler, nil)
 			w := ar.w
 			body := ar.body
 
@@ -278,7 +281,7 @@ func TestAuthzMapperBypass(t *testing.T) {
 			nil
 	})
 	input := stdAuthzInput()
-	ar := runAuthzTest(s, serialize(input), nil)
+	ar := runAuthzTest(s, serialize(input), nil, nil)
 	w := ar.w
 	body := ar.body
 
@@ -298,7 +301,7 @@ func TestAuthzMapperError(t *testing.T) {
 			errors.New("foobar")
 	})
 	input := stdAuthzInput()
-	ar := runAuthzTest(s, serialize(input), nil)
+	ar := runAuthzTest(s, serialize(input), nil, nil)
 	w := ar.w
 	body := ar.body
 
@@ -323,7 +326,7 @@ func TestAuthzTokenErrors(t *testing.T) {
 		return "", fmt.Errorf("no token for you")
 	}
 	input := stdAuthzInput()
-	ar := runAuthzTest(s, serialize(input), nil)
+	ar := runAuthzTest(s, serialize(input), nil, nil)
 	w := ar.w
 	body := ar.body
 
@@ -348,7 +351,7 @@ func TestAuthzBadToken(t *testing.T) {
 	input := stdAuthzInput()
 	ar := runAuthzTest(s, serialize(input), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(401)
-	}))
+	}), nil)
 	w := ar.w
 	body := ar.body
 
@@ -391,7 +394,7 @@ func TestAuthzAthenz404(t *testing.T) {
 	input := stdAuthzInput()
 	ar := runAuthzTest(s, serialize(input), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
-	}))
+	}), nil)
 	w := ar.w
 	body := ar.body
 
@@ -418,7 +421,7 @@ func TestAuthzAthenz500(t *testing.T) {
 	}
 	ar := runAuthzTest(s, serialize(input), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
-	}))
+	}), nil)
 	w := ar.w
 	body := ar.body
 
@@ -476,7 +479,7 @@ func TestAuthzBadInputs(t *testing.T) {
 		{400, append(serialize(base), 'X'), "invalid JSON request"},
 	}
 	for _, test := range tests {
-		ar := runAuthzTest(s, test.input, nil)
+		ar := runAuthzTest(s, test.input, nil, nil)
 		if ar.w.Code != test.code {
 			t.Fatalf("test %q: unexpected status code want %d, got %d", test.msg, test.code, ar.w.Code)
 		}
@@ -487,6 +490,33 @@ func TestAuthzBadInputs(t *testing.T) {
 				t.Errorf("response '%s' did not contain '%s'", ar.body.String(), test.msg)
 			}
 		}
+	}
+}
+
+func TestAuthzWithContextDone(t *testing.T) {
+	s := newAuthzScaffold(t)
+	defer s.Close()
+	input := stdAuthzInput()
+
+	cc, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	ar := runAuthzTest(s, serialize(input), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(404)
+	}), cc)
+	w := ar.w
+	body := ar.body
+
+	if w.Result().StatusCode != 200 {
+		t.Fatal("invalid status code", w.Result().StatusCode)
+	}
+	bs := body.String()
+	if bs != "" {
+		t.Errorf("response body is not empty, buffer: '%s'", bs)
+	}
+	es := s.l.b.String()
+	if es != "" {
+		t.Errorf("logger buffer is not empty, buffer: '%s'", es)
 	}
 }
 

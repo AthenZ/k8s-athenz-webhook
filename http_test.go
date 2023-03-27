@@ -232,3 +232,36 @@ func TestHTTPWriteBadJSON(t *testing.T) {
 		t.Errorf("bad external message want '%q' got '%q", es, body.String())
 	}
 }
+
+func TestWriteJSONWithContextDone(t *testing.T) {
+	l := newlp()
+	config := Config{
+		LogProvider: func(id string) Logger {
+			l.id = id
+			return l
+		},
+	}
+	r := httptest.NewRequest("GET", "/foo", nil)
+	r2 := requestWithContext(r, config)
+
+	cc, cancel := context.WithCancel(r2.Context())
+	cancel()
+
+	n := &node{}
+	var body bytes.Buffer
+	w := httptest.NewRecorder()
+	w.Body = &body
+	writeJSON(cc, w, n)
+
+	es := l.b.String()
+	if es != "" {
+		t.Errorf("logger buffer is not empty, buffer: '%s'", es)
+	}
+	if w.Code != 200 {
+		t.Errorf("default 200 was not set")
+	}
+	bs := body.String()
+	if bs != "" {
+		t.Errorf("response body is not empty, buffer: '%s'", bs)
+	}
+}

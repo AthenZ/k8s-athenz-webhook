@@ -142,7 +142,7 @@ type authnTestResult struct {
 	body *bytes.Buffer
 }
 
-func runAuthnTest(s *authnScaffold, input []byte, handler http.Handler) *authnTestResult {
+func runAuthnTest(s *authnScaffold, input []byte, handler http.Handler, c context.Context) *authnTestResult {
 	s.resetLog()
 	an := NewAuthenticator(s.config)
 	w := httptest.NewRecorder()
@@ -150,6 +150,9 @@ func runAuthnTest(s *authnScaffold, input []byte, handler http.Handler) *authnTe
 	w.Body = &respBody
 	r := httptest.NewRequest("POST", "/authn", bytes.NewBuffer(input))
 	s.h = handler
+	if c != nil {
+		r = r.WithContext(c)
+	}
 	an.ServeHTTP(w, r)
 	return &authnTestResult{
 		w:    w,
@@ -178,7 +181,7 @@ func TestAuthnHappyPath(t *testing.T) {
 
 		writeJSON(testContext, w, ap)
 	})
-	ar := runAuthnTest(s, serialize(input), zmsHandler)
+	ar := runAuthnTest(s, serialize(input), zmsHandler, nil)
 	w := ar.w
 	body := ar.body
 	if w.Result().StatusCode != 200 {
@@ -216,7 +219,7 @@ func TestAuthnZMSReject(t *testing.T) {
 		w.WriteHeader(401)
 		writeJSON(testContext, w, m)
 	})
-	ar := runAuthnTest(s, serialize(input), zmsHandler)
+	ar := runAuthnTest(s, serialize(input), zmsHandler, nil)
 	w := ar.w
 	body := ar.body
 	if w.Result().StatusCode != 200 {
@@ -292,7 +295,7 @@ func TestAuthnBadInputs(t *testing.T) {
 		{200, expiredToken(), "token has expired"},
 	}
 	for _, test := range tests {
-		ar := runAuthnTest(s, test.input, nil)
+		ar := runAuthnTest(s, test.input, nil, nil)
 		if ar.w.Code != test.code {
 			t.Fatalf("unexpected status code want %d, got %d", test.code, ar.w.Code)
 		}
@@ -332,7 +335,7 @@ func TestAuthnUserMappingError(t *testing.T) {
 		w.Write([]byte(fmt.Sprintf(`{ "key": "%s" }`, keyString)))
 		return
 	})
-	ar := runAuthnTest(s, serialize(stdAuthnInput(getToken(t))), ztsHandler)
+	ar := runAuthnTest(s, serialize(stdAuthnInput(getToken(t))), ztsHandler, nil)
 	code := 200
 	msg := "FOOBAR"
 	if ar.w.Code != code {
@@ -355,5 +358,33 @@ func TestAuthnUserMappingError(t *testing.T) {
 		"error=FOOBAR",
 	} {
 		s.containsLog(line)
+	}
+}
+
+func TestAuthnWithContextDone(t *testing.T) {
+	s := newAuthnScaffold(t)
+	defer s.Close()
+	input := stdAuthnInput(getToken(t))
+	zmsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(404)
+	})
+
+	cc, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	ar := runAuthnTest(s, serialize(input), zmsHandler, cc)
+	w := ar.w
+	body := ar.body
+
+	if w.Result().StatusCode != 200 {
+		t.Fatal("invalid status code", w.Result().StatusCode)
+	}
+	bs := body.String()
+	if bs != "" {
+		t.Errorf("response body is not empty, buffer: '%s'", bs)
+	}
+	es := s.l.b.String()
+	if es != "" {
+		t.Errorf("logger buffer is not empty, buffer: '%s'", es)
 	}
 }

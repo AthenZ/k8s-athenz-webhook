@@ -309,20 +309,26 @@ func (a *authorizer) logOutcome(logger Logger, sr *authz.SubjectAccessReviewSpec
 
 func (a *authorizer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	sr, err := a.getSubjectAccessReview(ctx, r)
-	if err != nil {
-		getLogger(ctx).Printf("authz request error from %s: %v\n", r.RemoteAddr, err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+
+	select {
+	case <-ctx.Done():
 		return
+	default:
+		sr, err := a.getSubjectAccessReview(ctx, r)
+		if err != nil {
+			getLogger(ctx).Printf("authz request error from %s: %v\n", r.RemoteAddr, err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		gs := a.authorize(ctx, sr.Spec)
+		a.logOutcome(getLogger(ctx), &sr.Spec, gs)
+
+		resp := struct {
+			APIVersion string                          `json:"apiVersion"`
+			Kind       string                          `json:"kind"`
+			Status     authz.SubjectAccessReviewStatus `json:"status"`
+		}{sr.APIVersion, sr.Kind, gs.status}
+		writeJSON(ctx, w, &resp)
 	}
-
-	gs := a.authorize(ctx, sr.Spec)
-	a.logOutcome(getLogger(ctx), &sr.Spec, gs)
-
-	resp := struct {
-		APIVersion string                          `json:"apiVersion"`
-		Kind       string                          `json:"kind"`
-		Status     authz.SubjectAccessReviewStatus `json:"status"`
-	}{sr.APIVersion, sr.Kind, gs.status}
-	writeJSON(ctx, w, &resp)
 }

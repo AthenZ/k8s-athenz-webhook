@@ -17,14 +17,19 @@ var logKey = struct{}{}
 
 // writeJSON writes the supplied data as JSON to the response writer.
 func writeJSON(ctx context.Context, w http.ResponseWriter, data interface{}) {
-	b, err := json.Marshal(data)
-	if err != nil {
-		getLogger(ctx).Printf("internal serialization error, %v", err)
-		http.Error(w, "internal serialization error", http.StatusInternalServerError)
+	select {
+	case <-ctx.Done():
 		return
+	default:
+		b, err := json.Marshal(data)
+		if err != nil {
+			getLogger(ctx).Printf("internal serialization error, %v", err)
+			http.Error(w, "internal serialization error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(b)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(b)
 }
 
 func newReqID() string {
